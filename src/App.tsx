@@ -469,7 +469,7 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => setPage("home")}>
-          <img className="brand__logo" src="/terrys-survivor-2026-logo.png" alt="Terry's Survivor 2026 logo" />
+          <img className="brand__logo" src={`${import.meta.env.BASE_URL}terrys-survivor-2026-logo.png`} alt="Terry's Survivor 2026 logo" />
           <span>
             <strong>{state.settings.leagueName}</strong>
             <small>One team. One chance. Survive.</small>
@@ -577,7 +577,7 @@ function HomePage({ state, prizePool, activeCount, eliminatedCount, selectedPlay
   return (
     <section className="page-stack">
       <div className="hero-panel">
-        <img className="hero-logo" src="/terrys-survivor-2026-logo.png" alt="Terry's Survivor 2026" />
+        <img className="hero-logo" src={`${import.meta.env.BASE_URL}terrys-survivor-2026-logo.png`} alt="Terry's Survivor 2026" />
         <div className="hero-copy">
           <span className="eyebrow">Week {state.settings.currentWeek}</span>
           <h1>Survive the week.</h1>
