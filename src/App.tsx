@@ -6,6 +6,9 @@ import { initialState } from "./data/initialState";
 import type { PickResult, Player, PlayerRole, SurvivorState } from "./types/survivor";
 import { applyAutomaticResults, DemoNflResultProvider } from "./services/nflResultService";
 import { cloudConfigured } from "./config/runtime";
+import { CloudAuthGate } from "./features/auth/CloudAuthGate";
+import { assignCloudLeadership, type CloudMembership } from "./services/accountService";
+import { CloudSnapshotRepository } from "./services/cloudSnapshotRepository";
 import "./styles.css";
 
 type Page = "home" | "pick" | "entry" | "board" | "commissioner";
@@ -137,14 +140,75 @@ function loadState(): SurvivorState {
   }
 }
 
-function App() {
+interface SurvivorAppProps {
+  cloudIdentity?: CloudMembership | null;
+  refreshCloudIdentity?: () => Promise<void>;
+}
+
+function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) {
   const [page, setPage] = useState<Page>("home");
   const [state, setState] = useState<SurvivorState>(loadState);
   const [notice, setNotice] = useState("");
+  const [cloudReady, setCloudReady] = useState(!cloudIdentity);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<"local" | "loading" | "saved" | "saving" | "error">(cloudIdentity ? "loading" : "local");
+
+  useEffect(() => {
+    if (!cloudIdentity) {
+      setCloudReady(true);
+      setCloudSyncStatus("local");
+      return;
+    }
+
+    let active = true;
+    const repository = new CloudSnapshotRepository(cloudIdentity.leagueId);
+    setCloudReady(false);
+    setCloudSyncStatus("loading");
+
+    repository.load()
+      .then(async (cloudState) => {
+        if (!active) return;
+        let next = cloudState ? normalizeState(cloudState) : normalizeState(loadState());
+        const match = next.players.find((player) =>
+          (cloudIdentity.email && player.email.toLowerCase() === cloudIdentity.email.toLowerCase()) ||
+          player.name.toLowerCase() === cloudIdentity.displayName.toLowerCase(),
+        );
+        if (match) next = { ...next, selectedPlayerId: match.id };
+        setState(next);
+        if (!cloudState && (cloudIdentity.role === "primary-commissioner" || cloudIdentity.role === "co-commissioner")) {
+          await repository.save(next);
+        }
+        if (active) {
+          setCloudReady(true);
+          setCloudSyncStatus("saved");
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+        if (active) {
+          setCloudReady(true);
+          setCloudSyncStatus("error");
+          showNotice("Cloud data could not be loaded. Local data remains available.");
+        }
+      });
+
+    return () => { active = false; };
+  }, [cloudIdentity?.leagueId, cloudIdentity?.memberId]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    if (!cloudIdentity || !cloudReady) return;
+    const timer = window.setTimeout(() => {
+      setCloudSyncStatus("saving");
+      new CloudSnapshotRepository(cloudIdentity.leagueId).save(state)
+        .then(() => setCloudSyncStatus("saved"))
+        .catch((error: unknown) => {
+          console.error(error);
+          setCloudSyncStatus("error");
+          showNotice("Cloud save failed. Your local copy was preserved.");
+        });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [state, cloudIdentity?.leagueId, cloudReady]);
 
   useEffect(() => {
     const viewer = state.players.find((player) => player.id === state.selectedPlayerId);
@@ -475,19 +539,27 @@ function App() {
             <small>One team. One chance. Survive.</small>
           </span>
         </button>
-        <label className="player-switcher">
-          Viewing as
-          <select
-            value={state.selectedPlayerId}
-            onChange={(event) =>
-              setState((current) => ({ ...current, selectedPlayerId: event.target.value }))
-            }
-          >
-            {state.players.map((player) => (
-              <option key={player.id} value={player.id}>{player.name} · {player.role === "primary-commissioner" ? "Primary" : player.role === "co-commissioner" ? "Co-Commish" : "Player"}</option>
-            ))}
-          </select>
-        </label>
+        {cloudIdentity ? (
+          <div className="cloud-identity">
+            <small>Signed in as</small>
+            <strong>{cloudIdentity.displayName} · {cloudIdentity.role === "primary-commissioner" ? "Primary" : cloudIdentity.role === "co-commissioner" ? "Co-Commish" : "Player"}</strong>
+            <span className={`cloud-sync cloud-sync--${cloudSyncStatus}`}>{cloudSyncStatus === "loading" ? "Loading cloud data…" : cloudSyncStatus === "saving" ? "Saving…" : cloudSyncStatus === "saved" ? "Cloud saved" : cloudSyncStatus === "error" ? "Cloud sync error" : "Local mode"}</span>
+          </div>
+        ) : (
+          <label className="player-switcher">
+            Local testing as
+            <select
+              value={state.selectedPlayerId}
+              onChange={(event) =>
+                setState((current) => ({ ...current, selectedPlayerId: event.target.value }))
+              }
+            >
+              {state.players.map((player) => (
+                <option key={player.id} value={player.id}>{player.name} · {player.role === "primary-commissioner" ? "Primary" : player.role === "co-commissioner" ? "Co-Commish" : "Player"}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </header>
 
       {notice ? <div className="notice">{notice}</div> : null}
@@ -515,7 +587,11 @@ function App() {
         ) : null}
         {page === "board" ? <BoardPage state={state} /> : null}
         {page === "commissioner" && hasCommissionerAccess ? (
-          <CommissionerPage
+          <>
+            {cloudIdentity ? (
+              <CloudLeadershipPanel identity={cloudIdentity} onRefresh={refreshCloudIdentity} />
+            ) : null}
+            <CommissionerPage
             state={state}
             prizePool={prizePool}
             onAddPlayer={addPlayer}
@@ -535,6 +611,7 @@ function App() {
             onAssignRole={assignCommissionerRole}
             onSyncAutomaticResults={syncAutomaticResults}
           />
+          </>
         ) : null}
       </main>
 
@@ -823,6 +900,51 @@ function BoardPage({ state }: { state: SurvivorState }) {
   );
 }
 
+function CloudLeadershipPanel({ identity, onRefresh }: { identity: CloudMembership; onRefresh?: () => Promise<void> }) {
+  const [terryEmail, setTerryEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [working, setWorking] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!terryEmail.trim()) return;
+    setWorking(true);
+    setMessage("");
+    try {
+      await assignCloudLeadership(terryEmail, "Terry");
+      await onRefresh?.();
+      setMessage("Leadership updated: Terry is Primary Commissioner and Jimbo is Co-Commissioner. Terry can claim the Primary account later with this email.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Leadership could not be updated.");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <section className="page-stack cloud-leadership-stack">
+      <article className="panel leadership-panel cloud-leadership-panel">
+        <div className="panel-heading">
+          <div><span className="eyebrow">Cloud leadership</span><h2>Terry Primary · Jimbo Co-Commissioner</h2></div>
+          <span className={`payment-status ${identity.role === "primary-commissioner" ? "payment-status--paid" : "payment-status--due"}`}>
+            Signed in as {identity.role === "primary-commissioner" ? "Primary" : "Co-Commissioner"}
+          </span>
+        </div>
+        {identity.role === "primary-commissioner" ? (
+          <form className="form-stack" onSubmit={submit}>
+            <p>Enter Terry’s exact sign-in email. The cloud roster will immediately reserve Primary Commissioner for Terry and move this account to Co-Commissioner. Terry can sign in and claim the reserved account later.</p>
+            <label>Terry’s email<input type="email" required value={terryEmail} onChange={(event) => setTerryEmail(event.target.value)} placeholder="terry@example.com" /></label>
+            <button className="primary-button" type="submit" disabled={working}>{working ? "Updating leadership…" : "Make Terry Primary"}</button>
+          </form>
+        ) : (
+          <p>Terry is reserved as Primary Commissioner. Jimbo remains Co-Commissioner with full Commissioner HQ access.</p>
+        )}
+        {message ? <div className="auth-message">{message}</div> : null}
+      </article>
+    </section>
+  );
+}
+
 function CommissionerPage({
   state,
   prizePool,
@@ -1055,6 +1177,14 @@ function CommissionerPage({
         <button onClick={onReset}>Reset Demo</button>
       </article>
     </section>
+  );
+}
+
+function App() {
+  return (
+    <CloudAuthGate>
+      {(identity, _session, refreshIdentity) => <SurvivorApp cloudIdentity={identity} refreshCloudIdentity={refreshIdentity} />}
+    </CloudAuthGate>
   );
 }
 

@@ -20,12 +20,9 @@ export class CloudSnapshotRepository implements StateRepository {
   async save(state: SurvivorState): Promise<void> {
     const client = getSupabaseClient();
     if (!client) throw new Error("Supabase is not configured.");
-    const { data: sessionData } = await client.auth.getSession();
-    const { error } = await client.from("league_snapshots").upsert({
-      league_id: this.leagueId,
-      state: state as unknown as import("../types/database").Json,
-      updated_by: sessionData.session?.user.id ?? null,
-      updated_at: new Date().toISOString(),
+    const { error } = await (client as any).rpc("save_survivor_snapshot", {
+      target_league: this.leagueId,
+      next_state: state as unknown as import("../types/database").Json,
     });
     if (error) throw error;
   }

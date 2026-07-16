@@ -1,7 +1,7 @@
 {
-  "name": "terrys-survivor-supabase-foundation-v9",
+  "name": "terrys-survivor-cloud-data-sync-v12",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.12.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

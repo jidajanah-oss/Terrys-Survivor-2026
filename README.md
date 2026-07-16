@@ -1,28 +1,19 @@
-# Terry’s Survivor 2026 — Supabase Auth + Database Foundation v9
+# Terry's Survivor 2026 — Cloud League Data Sync v12
 
-This package preserves every v8 feature and adds the real cloud foundation:
+This package makes the shared Supabase league snapshot the active data source after sign-in.
 
-- `@supabase/supabase-js` browser client
-- persistent Supabase Auth session service and magic-link entry point
-- typed client boundary
-- normalized SQL schema for leagues, members, picks, payments, NFL games, week closeout, and audit history
-- Row Level Security policies for players and commissioners
-- database constraints preventing a player from using the same team twice in the season
-- unique Primary Commissioner and Co-Commissioner assignments per league
-- temporary cloud snapshot repository for safe local-to-cloud migration
-- local development remains operational before credentials are configured
+## Added
+- Loads shared league state from Supabase after authentication.
+- Creates the first cloud snapshot from the commissioner's existing local league data.
+- Debounced cloud saves with visible Loading / Saving / Cloud saved / Error status.
+- Local fallback copy retained on every device.
+- Commissioner changes sync across devices.
+- Ordinary players may update only their own picks.
+- Database validation prevents duplicate team use, duplicate weekly picks, resolved-pick edits, and changes to another player's record.
+- Audit log entry for cloud saves.
 
-## Run
+## Required migration
+Run `supabase/migrations/202607160003_cloud_data_sync.sql` in the Supabase SQL Editor before starting v12.
 
-```powershell
-npm install
-npm run dev
-```
-
-## Build
-
-```powershell
-npm run build
-```
-
-See `docs/SUPABASE_SETUP.md` before connecting a Supabase project.
+## Environment
+Copy your working `.env.local` from v11 into this app folder. Never commit it.

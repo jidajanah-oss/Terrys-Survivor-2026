@@ -331,3 +331,48 @@ footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; pad
 }
 .cloud-readiness-panel { border-color: rgba(213, 169, 40, 0.48); }
 .sync-stamp { align-self: center; color: var(--muted); font-size: 0.9rem; }
+
+/* Supabase login + linked identity */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at top, #17314a 0, #071421 42%, #030b13 100%);
+}
+.auth-card {
+  width: min(100%, 520px);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid #294258;
+  border-radius: 24px;
+  background: rgba(8, 23, 36, .96);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .4);
+}
+.auth-card > img { width: 150px; margin: 0 auto; border-radius: 18px; }
+.auth-card h1, .auth-card p { margin: 0; }
+.auth-card label { display: grid; gap: 8px; font-weight: 700; }
+.auth-card input { width: 100%; padding: 13px 14px; border: 1px solid #36546d; border-radius: 12px; background: #071522; color: #fff; }
+.auth-card button { min-height: 48px; }
+.auth-message { padding: 12px 14px; border: 1px solid #785f23; border-radius: 12px; background: rgba(255, 194, 61, .09); }
+.auth-bootstrap { display: grid; gap: 12px; margin-top: 6px; padding-top: 18px; border-top: 1px solid #294258; }
+.text-button { background: transparent !important; border-color: transparent !important; color: #9fc6e7 !important; }
+.cloud-identity { display: grid; justify-items: end; gap: 2px; padding: 8px 12px; border: 1px solid #294258; border-radius: 12px; background: #0a1b2a; }
+.cloud-identity small { color: #8eb2cf; }
+@media (max-width: 680px) { .cloud-identity strong { font-size: .78rem; } .cloud-identity small { display: none; } }
+
+.cloud-leadership-stack { margin-bottom: 18px; }
+.cloud-leadership-panel { border-color: rgba(255, 196, 62, .42); }
+.cloud-leadership-panel .form-stack { max-width: 680px; }
+
+.cloud-sync {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.cloud-sync--saved { color: #73d58c; }
+.cloud-sync--saving, .cloud-sync--loading { color: #f0c75e; }
+.cloud-sync--error { color: #ff8b8b; }
