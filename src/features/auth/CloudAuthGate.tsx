@@ -9,7 +9,11 @@ interface CloudAuthGateProps {
 }
 
 function redirectUrl() {
-  return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+  if (window.location.hostname.endsWith("github.io")) {
+    return "https://jidajanah-oss.github.io/Terrys-Survivor-2026/";
+  }
+
+  return `${window.location.origin}/`;
 }
 
 export function CloudAuthGate({ children }: CloudAuthGateProps) {
