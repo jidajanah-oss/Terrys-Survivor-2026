@@ -746,7 +746,7 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
             onBuyBack={() => selectedPlayer && buyBack(selectedPlayer.id)}
           />
         ) : null}
-        {page === "board" ? <BoardPage state={state} /> : null}
+        {page === "board" ? <BoardPage state={state} showPayments={hasCommissionerAccess} /> : null}
         {page === "commissioner" && hasCommissionerAccess ? (
           <>
             {cloudIdentity ? (
@@ -1054,42 +1054,101 @@ function EntryPage({ state, player, onBuyBack }: {
   );
 }
 
-function BoardPage({ state }: { state: SurvivorState }) {
+function BoardPage({
+  state,
+  showPayments,
+}: {
+  state: SurvivorState;
+  showPayments: boolean;
+}) {
   return (
     <section className="page-stack">
       <div className="page-heading">
-        <div><span className="eyebrow">League board</span><h1>Survivor standings</h1><p>Active players first. Used-team and buyback history always stays attached to the same player.</p></div>
+        <div>
+          <span className="eyebrow">League board</span>
+          <h1>Survivor standings</h1>
+          <p>
+            Active players first. Used-team and buyback history always stays
+            attached to the same player.
+          </p>
+        </div>
       </div>
+
       <div className="board-table-wrap">
         <table className="board-table">
           <thead>
-            <tr><th>Player</th><th>Entry</th><th>Status</th><th>Week {state.settings.currentWeek}</th><th>Used</th><th>Buybacks</th><th>Total Paid</th></tr>
+            <tr>
+              <th>Player</th>
+              {showPayments ? <th>Entry</th> : null}
+              <th>Status</th>
+              <th>Week {state.settings.currentWeek}</th>
+              <th>Used</th>
+              <th>Buybacks</th>
+              {showPayments ? <th>Total Paid</th> : null}
+            </tr>
           </thead>
           <tbody>
-            {[...state.players].sort((a, b) => a.status.localeCompare(b.status)).map((player) => {
-              const currentPick = player.picks.find((pick) => pick.week === state.settings.currentWeek);
-              const payments = state.payments.filter((payment) => payment.playerId === player.id);
-              const paid = payments.reduce((sum, payment) => sum + payment.amount, 0);
-              const entryPaid = payments.some((payment) => payment.type === "initial-entry");
-              return (
-                <tr key={player.id}>
-                  <td><strong>{player.name}</strong><small>{player.email || "No email"}</small></td>
-                  <td><span className={`payment-status ${entryPaid ? "payment-status--paid" : "payment-status--due"}`}>{entryPaid ? "Paid" : "Due"}</span></td>
-                  <td><StatusPill status={player.status} /></td>
-                  <td>{currentPick ? `${currentPick.teamId === "NO-PICK" ? "—" : getTeam(currentPick.teamId).abbreviation} · ${currentPick.result}` : "No pick"}</td>
-                  <td>{[...new Set(player.picks.map((pick) => pick.teamId))].join(", ") || "—"}</td>
-                  <td>{player.buybacks}</td>
-                  <td>{currency(paid)}</td>
-                </tr>
-              );
-            })}
+            {[...state.players]
+              .sort((a, b) => a.status.localeCompare(b.status))
+              .map((player) => {
+                const currentPick = player.picks.find(
+                  (pick) => pick.week === state.settings.currentWeek,
+                );
+                const payments = state.payments.filter(
+                  (payment) => payment.playerId === player.id,
+                );
+                const paid = payments.reduce(
+                  (sum, payment) => sum + payment.amount,
+                  0,
+                );
+                const entryPaid = payments.some(
+                  (payment) => payment.type === "initial-entry",
+                );
+                const usedTeams = [
+                  ...new Set(player.picks.map((pick) => pick.teamId)),
+                ];
+
+                return (
+                  <tr key={player.id}>
+                    <td>
+                      <strong>{player.name}</strong>
+                      <small>{player.email || "No email"}</small>
+                    </td>
+                    {showPayments ? (
+                      <td>
+                        <span
+                          className={`payment-status payment-status--${
+                            entryPaid ? "paid" : "due"
+                          }`}
+                        >
+                          {entryPaid ? "Paid" : "Due"}
+                        </span>
+                      </td>
+                    ) : null}
+                    <td>
+                      <StatusPill status={player.status} />
+                    </td>
+                    <td>
+                      {currentPick
+                        ? `${
+                            currentPick.teamId === "NO-PICK"
+                              ? "â€”"
+                              : getTeam(currentPick.teamId).abbreviation
+                          } Â· ${currentPick.result}`
+                        : "No pick"}
+                    </td>
+                    <td>{usedTeams.join(", ") || "â€”"}</td>
+                    <td>{player.buybacks}</td>
+                    {showPayments ? <td>{currency(paid)}</td> : null}
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
     </section>
   );
 }
-
 function CloudLeadershipPanel({ identity, onRefresh }: { identity: CloudMembership; onRefresh?: () => Promise<void> }) {
   const [terryEmail, setTerryEmail] = useState("");
   const [message, setMessage] = useState("");
