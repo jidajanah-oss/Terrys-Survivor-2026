@@ -1,0 +1,2 @@
+[functions.sync-nfl-week]
+verify_jwt = false

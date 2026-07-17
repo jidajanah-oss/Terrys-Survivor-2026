@@ -1,0 +1,26 @@
+warning: in the working copy of '.env.example', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'public/sw.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/App.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/data/initialState.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/data/nfl.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/auth/CloudAuthGate.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/services/nflResultService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/styles.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/types/survivor.ts', LF will be replaced by CRLF the next time Git touches it
+ .env.example                        |   4 [32m+[m[31m-[m
+ README.md                           | 106 [32m+++++++++++++++++[m[31m---[m
+ package-lock.json                   |   8 [32m+[m[31m-[m
+ package.json                        |   4 [32m+[m[31m-[m
+ public/sw.js                        |   2 [32m+[m[31m-[m
+ src/App.tsx                         | 195 [32m+++++++++++++++++++++++++++++[m[31m-------[m
+ src/data/initialState.ts            |   2 [32m+[m
+ src/data/nfl.ts                     |  43 [32m+++++++[m[31m-[m
+ src/features/auth/CloudAuthGate.tsx |   8 [32m+[m[31m-[m
+ src/services/nflResultService.ts    |  21 [32m++[m[31m--[m
+ src/styles.css                      |   8 [32m++[m
+ src/types/survivor.ts               |  11 [32m++[m
+ tsconfig.app.tsbuildinfo            |   2 [32m+[m[31m-[m
+ 13 files changed, 338 insertions(+), 76 deletions(-)

@@ -1,4 +1,4 @@
-import type { Game, Team } from "../types/survivor";
+import type { Game, NflGameStatus, Team } from "../types/survivor";
 
 export const nflTeams: Team[] = [
   { id: "ARI", city: "Arizona", name: "Cardinals", abbreviation: "ARI" },
@@ -42,18 +42,57 @@ const pairings: Array<[string, string]> = [
   ["DET", "GB"], ["HOU", "LAR"], ["BAL", "BUF"], ["MIN", "CHI"],
 ];
 
-export function getGamesForWeek(week: number): Game[] {
+export function getDemoGamesForWeek(week: number): Game[] {
   return pairings.map(([awayTeamId, homeTeamId], index) => ({
     id: `W${week}-G${index + 1}`,
     week,
     awayTeamId,
     homeTeamId,
     kickoff: new Date(2026, 8, 10 + (week - 1) * 7 + Math.floor(index / 4), 13 + (index % 3) * 3).toISOString(),
+    status: "scheduled",
+    statusDetail: "Local demonstration schedule",
+    provider: "demo",
   }));
+}
+
+export function getGamesForWeek(week: number, games: Game[] = [], allowDemo = true): Game[] {
+  const live = games
+    .filter((game) => game.week === week)
+    .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
+  return live.length > 0 ? live : allowDemo ? getDemoGamesForWeek(week) : [];
 }
 
 export function getTeam(teamId: string): Team {
   const team = nflTeams.find((item) => item.id === teamId);
   if (!team) throw new Error(`Unknown NFL team: ${teamId}`);
   return team;
+}
+
+export function gameStatusLabel(status: NflGameStatus, statusDetail?: string): string {
+  if (statusDetail) return statusDetail;
+  switch (status) {
+    case "in-progress": return "Live";
+    case "final": return "Final";
+    case "postponed": return "Postponed";
+    case "canceled": return "Canceled";
+    default: return "Scheduled";
+  }
+}
+
+export function formatKickoff(kickoff: string): string {
+  const value = new Date(kickoff);
+  if (Number.isNaN(value.getTime())) return "Kickoff TBD";
+  return value.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function isGameLocked(game: Game, now = Date.now()): boolean {
+  if (game.status !== "scheduled") return true;
+  const kickoff = new Date(game.kickoff).getTime();
+  return Number.isNaN(kickoff) || kickoff <= now;
 }

@@ -1,4 +1,4 @@
-const CACHE = "terrys-survivor-v8";
+const CACHE = "terrys-survivor-v13";
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest", "./terrys-survivor-2026-logo.png"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL))));
 self.addEventListener("activate", (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))));

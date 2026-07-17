@@ -1,7 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { StatCard } from "./components/StatCard";
 import { StatusPill } from "./components/StatusPill";
-import { getGamesForWeek, getTeam, nflTeams } from "./data/nfl";
+import { formatKickoff, gameStatusLabel, getGamesForWeek, getTeam, isGameLocked, nflTeams } from "./data/nfl";
 import { initialState } from "./data/initialState";
 import type { PickResult, Player, PlayerRole, SurvivorState } from "./types/survivor";
 import { applyAutomaticResults, DemoNflResultProvider } from "./services/nflResultService";
@@ -9,6 +9,7 @@ import { cloudConfigured } from "./config/runtime";
 import { CloudAuthGate } from "./features/auth/CloudAuthGate";
 import { assignCloudLeadership, type CloudMembership } from "./services/accountService";
 import { CloudSnapshotRepository } from "./services/cloudSnapshotRepository";
+import { LiveNflSyncService } from "./services/liveNflService";
 import "./styles.css";
 
 type Page = "home" | "pick" | "entry" | "board" | "commissioner";
@@ -96,8 +97,21 @@ function normalizeState(value: SurvivorState): SurvivorState {
     payments: Array.isArray(value.payments) ? value.payments : [],
     selectedPlayerId,
     closedWeeks: Array.isArray(value.closedWeeks) ? value.closedWeeks : [],
+    nflGames: Array.isArray(value.nflGames) ? value.nflGames : [],
+    lastScheduleSyncAt: value.lastScheduleSyncAt,
     lastResultSyncAt: value.lastResultSyncAt,
+    nflProvider: value.nflProvider,
   };
+}
+
+
+function applyCloudViewer(state: SurvivorState, identity?: CloudMembership | null): SurvivorState {
+  if (!identity) return state;
+  const match = state.players.find((player) =>
+    (identity.email && player.email.toLowerCase() === identity.email.toLowerCase())
+    || player.name.toLowerCase() === identity.displayName.toLowerCase()
+  );
+  return match ? { ...state, selectedPlayerId: match.id } : state;
 }
 
 function loadState(): SurvivorState {
@@ -151,6 +165,11 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
   const [notice, setNotice] = useState("");
   const [cloudReady, setCloudReady] = useState(!cloudIdentity);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<"local" | "loading" | "saved" | "saving" | "error">(cloudIdentity ? "loading" : "local");
+  const [nflSyncing, setNflSyncing] = useState(false);
+  const applyingRemoteState = useRef(false);
+  const stateRef = useRef(state);
+
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   useEffect(() => {
     if (!cloudIdentity) {
@@ -167,12 +186,10 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
     repository.load()
       .then(async (cloudState) => {
         if (!active) return;
-        let next = cloudState ? normalizeState(cloudState) : normalizeState(loadState());
-        const match = next.players.find((player) =>
-          (cloudIdentity.email && player.email.toLowerCase() === cloudIdentity.email.toLowerCase()) ||
-          player.name.toLowerCase() === cloudIdentity.displayName.toLowerCase(),
+        const next = applyCloudViewer(
+          cloudState ? normalizeState(cloudState) : normalizeState(loadState()),
+          cloudIdentity,
         );
-        if (match) next = { ...next, selectedPlayerId: match.id };
         setState(next);
         if (!cloudState && (cloudIdentity.role === "primary-commissioner" || cloudIdentity.role === "co-commissioner")) {
           await repository.save(next);
@@ -196,6 +213,10 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (applyingRemoteState.current) {
+      applyingRemoteState.current = false;
+      return;
+    }
     if (!cloudIdentity || !cloudReady) return;
     const timer = window.setTimeout(() => {
       setCloudSyncStatus("saving");
@@ -209,6 +230,27 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
     }, 700);
     return () => window.clearTimeout(timer);
   }, [state, cloudIdentity?.leagueId, cloudReady]);
+
+  useEffect(() => {
+    if (!cloudIdentity || !cloudReady) return;
+    const repository = new CloudSnapshotRepository(cloudIdentity.leagueId);
+    const refreshFromCloud = async () => {
+      if (cloudSyncStatus === "saving") return;
+      try {
+        const remote = await repository.load();
+        if (!remote) return;
+        const normalized = applyCloudViewer(normalizeState(remote), cloudIdentity);
+        if (JSON.stringify(normalized) === JSON.stringify(stateRef.current)) return;
+        applyingRemoteState.current = true;
+        setState(normalized);
+        setCloudSyncStatus("saved");
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    const timer = window.setInterval(refreshFromCloud, 60_000);
+    return () => window.clearInterval(timer);
+  }, [cloudIdentity?.leagueId, cloudReady, cloudSyncStatus]);
 
   useEffect(() => {
     const viewer = state.players.find((player) => player.id === state.selectedPlayerId);
@@ -233,10 +275,20 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
       showNotice(`Week ${state.settings.currentWeek} is closed and cannot be changed.`);
       return;
     }
-    const game = getGamesForWeek(state.settings.currentWeek).find(
+    const game = getGamesForWeek(state.settings.currentWeek, state.nflGames, !cloudIdentity).find(
       (item) => item.awayTeamId === teamId || item.homeTeamId === teamId,
     );
     if (!game) return;
+    const existingPick = selectedPlayer.picks.find((pick) => pick.week === state.settings.currentWeek);
+    const existingGame = existingPick
+      ? getGamesForWeek(state.settings.currentWeek, state.nflGames, !cloudIdentity).find(
+          (item) => item.id === existingPick.gameId || item.awayTeamId === existingPick.teamId || item.homeTeamId === existingPick.teamId,
+        )
+      : undefined;
+    if ((existingGame && isGameLocked(existingGame)) || isGameLocked(game)) {
+      showNotice("This selection is locked because its NFL game has started.");
+      return;
+    }
 
     let saved = false;
     setState((current) => ({
@@ -275,6 +327,16 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
       showNotice(`Week ${state.settings.currentWeek} is closed and cannot be changed.`);
       return;
     }
+    const currentPick = selectedPlayer.picks.find((pick) => pick.week === state.settings.currentWeek);
+    const currentGame = currentPick
+      ? getGamesForWeek(state.settings.currentWeek, state.nflGames, !cloudIdentity).find(
+          (game) => game.id === currentPick.gameId || game.awayTeamId === currentPick.teamId || game.homeTeamId === currentPick.teamId,
+        )
+      : undefined;
+    if (currentGame && isGameLocked(currentGame)) {
+      showNotice("This pick is locked because the NFL game has started.");
+      return;
+    }
     setState((current) => ({
       ...current,
       players: current.players.map((player) =>
@@ -288,24 +350,30 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
 
   const resolvePick = (playerId: string, result: PickResult) => {
     const player = state.players.find((item) => item.id === playerId);
-    if (!player || player.status !== "active") return;
+    if (!player) return;
 
     setState((current) => ({
       ...current,
       players: current.players.map((item) => {
         if (item.id !== playerId) return item;
         const hasCurrentPick = item.picks.some((pick) => pick.week === current.settings.currentWeek);
+        const resolvedAt = new Date().toISOString();
         const picks = hasCurrentPick
           ? item.picks.map((pick) =>
-              pick.week === current.settings.currentWeek ? { ...pick, result } : pick,
+              pick.week === current.settings.currentWeek ? {
+                ...pick,
+                result,
+                resolutionSource: "commissioner" as const,
+                resolvedAt,
+              } : pick,
             )
           : item.picks;
         const eliminated = result === "loss" || result === "tie" || result === "no-pick";
         return {
           ...item,
           picks,
-          status: eliminated ? "eliminated" : item.status,
-          eliminatedWeek: eliminated ? current.settings.currentWeek : item.eliminatedWeek,
+          status: eliminated ? "eliminated" : "active",
+          eliminatedWeek: eliminated ? current.settings.currentWeek : undefined,
         };
       }),
     }));
@@ -453,11 +521,36 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
 
 
   const syncAutomaticResults = async () => {
-    const provider = new DemoNflResultProvider();
-    const finals = await provider.fetchFinalResults(state.settings.currentWeek);
-    const pendingBefore = state.players.filter((player) => player.picks.some((pick) => pick.week === state.settings.currentWeek && pick.result === "pending")).length;
-    setState((current) => applyAutomaticResults(current, finals));
-    showNotice(pendingBefore ? `Automatic scoring processed ${pendingBefore} pending pick${pendingBefore === 1 ? "" : "s"}.` : "No pending picks required scoring.");
+    if (nflSyncing) return;
+    setNflSyncing(true);
+    try {
+      if (cloudIdentity) {
+        const summary = await new LiveNflSyncService(cloudIdentity.leagueId).sync(
+          state.settings.season,
+          state.settings.currentWeek,
+        );
+        const refreshed = summary.state ?? await new CloudSnapshotRepository(cloudIdentity.leagueId).load();
+        if (refreshed) {
+          applyingRemoteState.current = true;
+          setState(applyCloudViewer(normalizeState(refreshed), cloudIdentity));
+        }
+        showNotice(
+          `NFL sync complete: ${summary.gamesFetched} games, ${summary.picksResolved} pick${summary.picksResolved === 1 ? "" : "s"} resolved.`,
+        );
+        return;
+      }
+
+      const provider = new DemoNflResultProvider();
+      const finals = await provider.fetchFinalResults(state.settings.currentWeek);
+      const pendingBefore = state.players.filter((player) => player.picks.some((pick) => pick.week === state.settings.currentWeek && pick.result === "pending")).length;
+      setState((current) => applyAutomaticResults(current, finals));
+      showNotice(pendingBefore ? `Local demo scoring processed ${pendingBefore} pending pick${pendingBefore === 1 ? "" : "s"}.` : "No pending picks required scoring.");
+    } catch (error) {
+      console.error(error);
+      showNotice(error instanceof Error ? error.message : "NFL results could not be synchronized.");
+    } finally {
+      setNflSyncing(false);
+    }
   };
 
   const closeCurrentWeek = () => {
@@ -573,10 +666,11 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
             eliminatedCount={eliminatedCount}
             selectedPlayer={selectedPlayer}
             onMakePick={() => setPage("pick")}
+            allowDemoSchedule={!cloudIdentity}
           />
         ) : null}
         {page === "pick" ? (
-          <PickPage state={state} player={selectedPlayer} onSave={savePick} onClear={clearCurrentPick} />
+          <PickPage state={state} player={selectedPlayer} onSave={savePick} onClear={clearCurrentPick} allowDemoSchedule={!cloudIdentity} />
         ) : null}
         {page === "entry" ? (
           <EntryPage
@@ -610,6 +704,7 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
             onAdvanceWeek={advanceToNextWeek}
             onAssignRole={assignCommissionerRole}
             onSyncAutomaticResults={syncAutomaticResults}
+            nflSyncing={nflSyncing}
           />
           </>
         ) : null}
@@ -619,6 +714,7 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
         <span>Entry: {currency(state.settings.entryFee)}</span>
         <span>Buybacks: {currency(state.settings.buybackFee)} through Week {state.settings.buybackThroughWeek}</span>
         <span>Used teams never reset</span>
+        <span>{state.nflProvider ? `NFL data: ${state.nflProvider}` : "NFL data not synced"}</span>
       </footer>
 
       <nav className="nav-tabs" aria-label="Primary navigation">
@@ -638,15 +734,21 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
   );
 }
 
-function HomePage({ state, prizePool, activeCount, eliminatedCount, selectedPlayer, onMakePick }: {
+function HomePage({ state, prizePool, activeCount, eliminatedCount, selectedPlayer, onMakePick, allowDemoSchedule }: {
   state: SurvivorState;
   prizePool: number;
   activeCount: number;
   eliminatedCount: number;
   selectedPlayer?: Player;
   onMakePick: () => void;
+  allowDemoSchedule: boolean;
 }) {
   const currentPick = selectedPlayer?.picks.find((pick) => pick.week === state.settings.currentWeek);
+  const currentGame = currentPick
+    ? getGamesForWeek(state.settings.currentWeek, state.nflGames, allowDemoSchedule).find(
+        (game) => game.id === currentPick.gameId || game.awayTeamId === currentPick.teamId || game.homeTeamId === currentPick.teamId,
+      )
+    : undefined;
   const totalPaid = state.payments
     .filter((payment) => payment.playerId === selectedPlayer?.id)
     .reduce((sum, payment) => sum + payment.amount, 0);
@@ -680,8 +782,9 @@ function HomePage({ state, prizePool, activeCount, eliminatedCount, selectedPlay
           {currentPick ? (
             <div className="featured-pick">
               <span>Week {state.settings.currentWeek} selection</span>
-              <strong>{getTeam(currentPick.teamId).city} {getTeam(currentPick.teamId).name}</strong>
-              <small>Result: {currentPick.result}</small>
+              <strong>{currentPick.teamId === "NO-PICK" ? "No pick" : `${getTeam(currentPick.teamId).city} ${getTeam(currentPick.teamId).name}`}</strong>
+              <small>{currentGame ? `${gameStatusLabel(currentGame.status, currentGame.statusDetail)} · ${formatKickoff(currentGame.kickoff)}` : `Result: ${currentPick.result}`}</small>
+              {currentGame?.status === "final" ? <small>Final: {currentGame.awayTeamId} {currentGame.awayScore ?? 0} · {currentGame.homeTeamId} {currentGame.homeScore ?? 0}</small> : null}
             </div>
           ) : <p className="empty-state">No Week {state.settings.currentWeek} pick has been submitted.</p>}
         </article>
@@ -695,11 +798,12 @@ function HomePage({ state, prizePool, activeCount, eliminatedCount, selectedPlay
   );
 }
 
-function PickPage({ state, player, onSave, onClear }: {
+function PickPage({ state, player, onSave, onClear, allowDemoSchedule }: {
   state: SurvivorState;
   player?: Player;
   onSave: (teamId: string) => void;
   onClear: () => void;
+  allowDemoSchedule: boolean;
 }) {
   const currentPick = player?.picks.find((pick) => pick.week === state.settings.currentWeek);
   const weekClosed = state.closedWeeks.includes(state.settings.currentWeek);
@@ -722,13 +826,27 @@ function PickPage({ state, player, onSave, onClear }: {
   }
 
   const pendingTeam = pendingTeamId ? getTeam(pendingTeamId) : undefined;
-  const pickChanged = Boolean(pendingTeamId) && pendingTeamId !== currentPick?.teamId;
-  const games = getGamesForWeek(state.settings.currentWeek);
+  const games = getGamesForWeek(state.settings.currentWeek, state.nflGames, allowDemoSchedule);
+  const currentGame = currentPick
+    ? games.find((game) => game.id === currentPick.gameId || game.awayTeamId === currentPick.teamId || game.homeTeamId === currentPick.teamId)
+    : undefined;
+  const currentPickLocked = Boolean(currentGame && isGameLocked(currentGame));
+  const pickChanged = Boolean(pendingTeamId) && pendingTeamId !== currentPick?.teamId && !currentPickLocked;
   const submitPick = () => pendingTeamId && onSave(pendingTeamId);
   const clearPick = () => {
     setPendingTeamId("");
     onClear();
   };
+
+  if (games.length === 0) {
+    return (
+      <section className="panel centered">
+        <span className="eyebrow">Week {state.settings.currentWeek}</span>
+        <h1>Live NFL schedule not loaded</h1>
+        <p>A commissioner needs to open Commissioner HQ and run Check Live NFL Schedule & Results.</p>
+      </section>
+    );
+  }
 
   return (
     <section className="page-stack pick-page">
@@ -738,7 +856,7 @@ function PickPage({ state, player, onSave, onClear }: {
           <h1>Choose one team</h1>
           <p>Select a team, then press Submit Pick. Any team used before an elimination remains locked after a buyback.</p>
         </div>
-        {currentPick ? <button className="secondary-button" onClick={clearPick}>Clear Current Pick</button> : null}
+        {currentPick ? <button className="secondary-button" onClick={clearPick} disabled={currentPickLocked}>{currentPickLocked ? "Pick Locked" : "Clear Current Pick"}</button> : null}
       </div>
       <div className="used-team-strip">
         <strong>Used teams:</strong>
@@ -762,21 +880,22 @@ function PickPage({ state, player, onSave, onClear }: {
             {[game.awayTeamId, game.homeTeamId].map((teamId, index) => {
               const team = getTeam(teamId);
               const used = usedBeforeThisWeek.has(teamId);
+              const locked = isGameLocked(game);
               const selected = pendingTeamId === teamId;
               return (
                 <button
                   key={teamId}
                   className={`team-choice ${selected ? "selected" : ""}`}
                   onClick={() => setPendingTeamId(teamId)}
-                  disabled={used}
+                  disabled={used || locked}
                 >
                   <span className="team-abbr">{team.abbreviation}</span>
                   <span><strong>{team.city}</strong><small>{team.name}</small></span>
-                  <em>{used ? "Used" : selected ? "Selected" : index === 0 ? "Away" : "Home"}</em>
+                  <em>{used ? "Used" : locked ? "Locked" : selected ? "Selected" : index === 0 ? "Away" : "Home"}</em>
                 </button>
               );
             })}
-            <small className="kickoff">Demo Week {state.settings.currentWeek} matchup</small>
+            <small className={`kickoff kickoff--${game.status}`}>{gameStatusLabel(game.status, game.statusDetail)} · {formatKickoff(game.kickoff)}{game.status === "final" ? ` · ${game.awayTeamId} ${game.awayScore ?? 0}–${game.homeScore ?? 0} ${game.homeTeamId}` : ""}</small>
           </article>
         ))}
       </div>
@@ -959,6 +1078,7 @@ function CommissionerPage({
   onAdvanceWeek,
   onAssignRole,
   onSyncAutomaticResults,
+  nflSyncing,
 }: {
   state: SurvivorState;
   prizePool: number;
@@ -973,6 +1093,7 @@ function CommissionerPage({
   onAdvanceWeek: () => void;
   onAssignRole: (playerId: string, role: PlayerRole) => void;
   onSyncAutomaticResults: () => void;
+  nflSyncing: boolean;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -1066,15 +1187,15 @@ function CommissionerPage({
 
       <article className="panel cloud-readiness-panel">
         <div className="panel-heading">
-          <div><span className="eyebrow">PWA + cloud foundation</span><h2>Deployment readiness</h2></div>
+          <div><span className="eyebrow">Live NFL automation</span><h2>Schedule and final scoring</h2></div>
           <span className={`payment-status ${cloudConfigured ? "payment-status--paid" : "payment-status--due"}`}>{cloudConfigured ? "Supabase configured" : "Local development"}</span>
         </div>
-        <p>The app now includes an installable PWA shell, GitHub Pages-safe paths, a real Supabase client boundary, secure schema and role policies, a swappable persistence adapter, and an automatic NFL result service boundary.</p>
+        <p>Supabase now fetches the live NFL schedule and final scores through a server-side Edge Function. Final games automatically mark picks as wins, losses, or ties and eliminate losing entries.</p>
         <div className="row-actions">
-          <button className="primary-button" onClick={onSyncAutomaticResults} disabled={weekClosed}>Check Final NFL Results</button>
-          <span className="sync-stamp">{state.lastResultSyncAt ? `Last check: ${new Date(state.lastResultSyncAt).toLocaleString()}` : "No result check yet"}</span>
+          <button className="primary-button" onClick={onSyncAutomaticResults} disabled={nflSyncing}>{nflSyncing ? "Checking NFL…" : "Check Live NFL Schedule & Results"}</button>
+          <span className="sync-stamp">{state.lastScheduleSyncAt ? `Last NFL sync: ${new Date(state.lastScheduleSyncAt).toLocaleString()}` : "No live NFL sync yet"}</span>
         </div>
-        <small>Local mode still uses deterministic demo finals. The included Supabase schema and auth services prepare the production app for secure cloud accounts and centrally processed NFL results.</small>
+        <small>{cloudConfigured ? `Provider: ${state.nflProvider ?? "waiting for first sync"}. A scheduled Supabase job can run this automatically even when no player has the app open.` : "Local mode continues to use a demonstration schedule and deterministic test results."}</small>
       </article>
 
       <article className="panel weekly-closeout-panel">
@@ -1133,7 +1254,7 @@ function CommissionerPage({
         <div className="commissioner-list">
           {state.players.map((player) => {
             const pick = player.picks.find((item) => item.week === state.settings.currentWeek);
-            const canResolve = player.status === "active";
+            const canResolve = Boolean(pick);
             const canBuyBack = player.status === "eliminated" && !buybacksClosed;
             return (
               <div className="commissioner-row" key={player.id}>
@@ -1143,9 +1264,9 @@ function CommissionerPage({
                 </div>
                 <StatusPill status={player.status} />
                 <div className="row-actions">
-                  <button onClick={() => onResolve(player.id, "win")} disabled={!pick || !canResolve}>Win</button>
-                  <button onClick={() => onResolve(player.id, "loss")} disabled={!pick || !canResolve}>Loss</button>
-                  <button onClick={() => onResolve(player.id, "tie")} disabled={!pick || !canResolve}>Tie</button>
+                  <button onClick={() => onResolve(player.id, "win")} disabled={!canResolve}>Win</button>
+                  <button onClick={() => onResolve(player.id, "loss")} disabled={!canResolve}>Loss</button>
+                  <button onClick={() => onResolve(player.id, "tie")} disabled={!canResolve}>Tie</button>
                   <button onClick={() => onResolve(player.id, "no-pick")} disabled={Boolean(pick) || !canResolve}>No Pick</button>
                   {canBuyBack ? <button className="buyback-button" onClick={() => onBuyBack(player.id)}>Buy Back</button> : null}
                 </div>

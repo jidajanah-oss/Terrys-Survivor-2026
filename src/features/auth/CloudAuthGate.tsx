@@ -9,11 +9,9 @@ interface CloudAuthGateProps {
 }
 
 function redirectUrl() {
-  if (window.location.hostname.endsWith("github.io")) {
-    return "https://jidajanah-oss.github.io/Terrys-Survivor-2026/";
-  }
-
-  return `${window.location.origin}/`;
+  const path = window.location.pathname;
+  const basePath = path.endsWith("/") ? path : path.slice(0, path.lastIndexOf("/") + 1);
+  return `${window.location.origin}${basePath || "/"}`;
 }
 
 export function CloudAuthGate({ children }: CloudAuthGateProps) {

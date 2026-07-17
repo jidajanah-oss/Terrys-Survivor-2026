@@ -1,6 +1,7 @@
 export type PickResult = "pending" | "win" | "loss" | "tie" | "no-pick";
 export type PlayerStatus = "active" | "eliminated";
 export type PlayerRole = "primary-commissioner" | "co-commissioner" | "player";
+export type NflGameStatus = "scheduled" | "in-progress" | "final" | "postponed" | "canceled";
 
 export interface Team {
   id: string;
@@ -15,6 +16,12 @@ export interface Game {
   awayTeamId: string;
   homeTeamId: string;
   kickoff: string;
+  status: NflGameStatus;
+  awayScore?: number;
+  homeScore?: number;
+  statusDetail?: string;
+  provider?: string;
+  providerUpdatedAt?: string;
 }
 
 export interface SurvivorPick {
@@ -50,6 +57,7 @@ export interface Player {
 
 export interface LeagueSettings {
   leagueName: string;
+  season: number;
   currentWeek: number;
   entryFee: number;
   buybackFee: number;
@@ -62,5 +70,8 @@ export interface SurvivorState {
   payments: PaymentRecord[];
   selectedPlayerId: string;
   closedWeeks: number[];
+  nflGames: Game[];
+  lastScheduleSyncAt?: string;
   lastResultSyncAt?: string;
+  nflProvider?: string;
 }

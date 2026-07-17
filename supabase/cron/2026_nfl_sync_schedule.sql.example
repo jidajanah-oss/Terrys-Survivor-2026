@@ -1,0 +1,36 @@
+-- Run only after the sync-nfl-week Edge Function has been deployed.
+-- Store these two values in Supabase Vault first:
+--   terrys_nfl_sync_url = https://YOUR_PROJECT_REF.supabase.co/functions/v1/sync-nfl-week
+--   terrys_nfl_sync_service_role = your LEGACY service_role JWT key
+-- Never put either value in the browser app or GitHub.
+
+create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_net with schema extensions;
+
+select cron.unschedule('terrys-survivor-nfl-sync')
+where exists (select 1 from cron.job where jobname = 'terrys-survivor-nfl-sync');
+
+select cron.schedule(
+  'terrys-survivor-nfl-sync',
+  '*/10 * * * *',
+  $$
+  select net.http_post(
+    url := (
+      select decrypted_secret
+      from vault.decrypted_secrets
+      where name = 'terrys_nfl_sync_url'
+      limit 1
+    ),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret
+        from vault.decrypted_secrets
+        where name = 'terrys_nfl_sync_service_role'
+        limit 1
+      )
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);

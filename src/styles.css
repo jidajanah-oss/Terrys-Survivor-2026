@@ -376,3 +376,11 @@ footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; pad
 .cloud-sync--saved { color: #73d58c; }
 .cloud-sync--saving, .cloud-sync--loading { color: #f0c75e; }
 .cloud-sync--error { color: #ff8b8b; }
+
+/* v13 live NFL schedule and automatic scoring */
+.kickoff--in-progress { color: #ffd36b; font-weight: 800; }
+.kickoff--final { color: #83d99c; font-weight: 800; }
+.kickoff--postponed,
+.kickoff--canceled { color: #ff9b9b; font-weight: 800; }
+.team-choice:disabled.selected { opacity: .85; background: rgba(246, 196, 83, .12); }
+.cloud-readiness-panel .sync-stamp { color: #9fb2c3; }

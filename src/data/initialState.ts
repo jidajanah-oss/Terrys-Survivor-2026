@@ -5,6 +5,7 @@ const createdAt = new Date().toISOString();
 export const initialState: SurvivorState = {
   settings: {
     leagueName: "Terry's Survivor 2026",
+    season: 2026,
     currentWeek: 1,
     entryFee: 20,
     buybackFee: 20,
@@ -49,4 +50,5 @@ export const initialState: SurvivorState = {
   ],
   selectedPlayerId: "player-terry",
   closedWeeks: [],
+  nflGames: [],
 };
