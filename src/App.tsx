@@ -1137,7 +1137,7 @@ function BoardPage({
                           } Â· ${currentPick.result}`
                         : "No pick"}
                     </td>
-                    <td>{usedTeams.join(", ") || "â€”"}</td>
+                    <td>{usedTeams.join(", ") || "None"}</td>
                     <td>{player.buybacks}</td>
                     {showPayments ? <td>{currency(paid)}</td> : null}
                   </tr>
