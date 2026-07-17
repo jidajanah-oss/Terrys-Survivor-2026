@@ -19,6 +19,8 @@ export interface LeagueRosterMembership {
   role: PlayerRole;
   status: PlayerStatus;
   buybacks: number;
+  lastInviteSentAt: string | null;
+  inviteSendCount: number;
 }
 
 interface LeagueRosterRow {
@@ -30,6 +32,8 @@ interface LeagueRosterRow {
   role: PlayerRole;
   status: PlayerStatus;
   buybacks: number;
+  last_invite_sent_at: string | null;
+  invite_send_count: number | null;
 }
 
 function mapRosterRow(row: LeagueRosterRow): LeagueRosterMembership {
@@ -42,6 +46,8 @@ function mapRosterRow(row: LeagueRosterRow): LeagueRosterMembership {
     role: row.role,
     status: row.status,
     buybacks: row.buybacks ?? 0,
+    lastInviteSentAt: row.last_invite_sent_at,
+    inviteSendCount: row.invite_send_count ?? 0,
   };
 }
 
@@ -140,7 +146,7 @@ export async function listLeagueRosterMemberships(
   const { data, error } = await (client as any)
     .from("league_members")
     .select(
-      "id, league_id, user_id, display_name, email, role, status, buybacks",
+      "id, league_id, user_id, display_name, email, role, status, buybacks, last_invite_sent_at, invite_send_count",
     )
     .eq("league_id", leagueId)
     .order("joined_at", { ascending: true });
@@ -148,6 +154,34 @@ export async function listLeagueRosterMemberships(
   if (error) throw error;
 
   return ((data ?? []) as LeagueRosterRow[]).map(mapRosterRow);
+}
+
+
+export interface LeagueRosterInviteReceipt {
+  membershipId: string;
+  lastInviteSentAt: string;
+  inviteSendCount: number;
+}
+
+export async function recordLeagueRosterInviteSent(
+  leagueId: string,
+  membershipId: string,
+): Promise<LeagueRosterInviteReceipt> {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await (client as any).rpc(
+    "record_survivor_invite_sent",
+    {
+      target_league: leagueId,
+      target_member: membershipId,
+    },
+  );
+
+  if (error) throw error;
+  if (!data) throw new Error("The invitation receipt could not be recorded.");
+
+  return data as unknown as LeagueRosterInviteReceipt;
 }
 
 export interface SaveLeagueRosterMembershipInput {

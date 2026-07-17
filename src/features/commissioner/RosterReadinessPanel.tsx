@@ -4,9 +4,11 @@ import {
   ensureLeagueRosterMemberships,
   listLeagueRosterMemberships,
   matchLeagueRosterMembership,
+  recordLeagueRosterInviteSent,
   saveLeagueRosterMembership,
   type LeagueRosterMembership,
 } from "../../services/accountService";
+import { sendMagicLink } from "../../services/authService";
 import type { Player } from "../../types/survivor";
 import "./RosterReadinessPanel.css";
 
@@ -59,6 +61,14 @@ function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function inviteRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function formatInviteTime(value: string) {
+  return new Date(value).toLocaleString();
+}
+
 export function RosterReadinessPanel({
   players,
   leagueId,
@@ -74,6 +84,7 @@ export function RosterReadinessPanel({
   const [draftName, setDraftName] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
   const [savingPlayerId, setSavingPlayerId] = useState<string | null>(null);
+  const [invitingPlayerId, setInvitingPlayerId] = useState<string | null>(null);
 
   async function loadRoster(ensureMissing: boolean) {
     if (!leagueId) {
@@ -263,6 +274,63 @@ export function RosterReadinessPanel({
     }
   }
 
+
+  async function sendInvite(entry: ReadinessEntry) {
+    if (!leagueId) {
+      setMessage("Cloud sign-in is required before invitations can be sent.");
+      return;
+    }
+
+    if (!entry.membership?.id) {
+      setMessage("Refresh account readiness before sending this invitation.");
+      return;
+    }
+
+    if (!entry.email) {
+      setMessage("Add the player's email before sending an invitation.");
+      return;
+    }
+
+    if (entry.status === "linked") {
+      setMessage(`${entry.player.name} is already linked.`);
+      return;
+    }
+
+    setInvitingPlayerId(entry.player.id);
+    setMessage("");
+
+    try {
+      await sendMagicLink(entry.email, inviteRedirectUrl());
+
+      try {
+        const receipt = await recordLeagueRosterInviteSent(
+          leagueId,
+          entry.membership.id,
+        );
+        await loadRoster(false);
+        setMessage(
+          `Supabase accepted the invitation for ${entry.player.name}. ` +
+            `Request #${receipt.inviteSendCount} was recorded at ` +
+            `${formatInviteTime(receipt.lastInviteSentAt)}.`,
+        );
+      } catch (trackingError) {
+        console.error(trackingError);
+        setMessage(
+          `Supabase accepted the invitation for ${entry.player.name}, ` +
+            "but the send time could not be recorded. Check Auth or SMTP logs.",
+        );
+      }
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "The magic-link invitation could not be requested.",
+      );
+    } finally {
+      setInvitingPlayerId(null);
+    }
+  }
+
   async function refreshRoster() {
     setRefreshing(true);
     setMessage("");
@@ -288,8 +356,8 @@ export function RosterReadinessPanel({
           <span className="eyebrow">Player accounts</span>
           <h2>Account readiness</h2>
           <p>
-            Add player emails, confirm who is linked, and prepare the remaining
-            roster for secure magic-link sign-in.
+            Add player emails, send secure magic-link invitations, and confirm
+            who has completed account linking.
           </p>
         </div>
 
@@ -377,6 +445,12 @@ export function RosterReadinessPanel({
             const linked = entry.status === "linked";
             const leadership = entry.player.role !== "player";
             const saving = savingPlayerId === entry.player.id;
+            const inviting = invitingPlayerId === entry.player.id;
+            const inviteDisabled =
+              !leagueId ||
+              !entry.membership?.id ||
+              entry.status !== "ready" ||
+              Boolean(invitingPlayerId);
 
             return (
               <article className="readiness-card" key={entry.player.id}>
@@ -462,13 +536,45 @@ export function RosterReadinessPanel({
                     </div>
                   </form>
                 ) : (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => beginEdit(entry)}
-                  >
-                    Edit Player
-                  </button>
+                  <>
+                    {entry.membership?.lastInviteSentAt ? (
+                      <p className="invite-receipt">
+                        Last invite requested{" "}
+                        <strong>
+                          {formatInviteTime(entry.membership.lastInviteSentAt)}
+                        </strong>
+                        {entry.membership.inviteSendCount > 1
+                          ? ` · ${entry.membership.inviteSendCount} requests`
+                          : ""}
+                      </p>
+                    ) : null}
+
+                    <div className="readiness-card__actions">
+                      {entry.status === "ready" ? (
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={() => void sendInvite(entry)}
+                          disabled={inviteDisabled}
+                        >
+                          {inviting
+                            ? "Sending…"
+                            : entry.membership?.lastInviteSentAt
+                              ? "Resend Invite"
+                              : "Send Invite"}
+                        </button>
+                      ) : null}
+
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => beginEdit(entry)}
+                        disabled={Boolean(invitingPlayerId)}
+                      >
+                        Edit Player
+                      </button>
+                    </div>
+                  </>
                 )}
               </article>
             );

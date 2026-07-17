@@ -357,30 +357,80 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
       ...current,
       players: current.players.map((item) => {
         if (item.id !== playerId) return item;
-        const hasCurrentPick = item.picks.some((pick) => pick.week === current.settings.currentWeek);
+
+        const currentPick = item.picks.find(
+          (pick) => pick.week === current.settings.currentWeek,
+        );
+        const hasCurrentPick = Boolean(currentPick);
         const resolvedAt = new Date().toISOString();
-        const picks = hasCurrentPick
-          ? item.picks.map((pick) =>
-              pick.week === current.settings.currentWeek ? {
-                ...pick,
-                result,
-                resolutionSource: "commissioner" as const,
-                resolvedAt,
-              } : pick,
+        const undoingCommissionerOverride =
+          result === "pending" &&
+          currentPick?.resolutionSource === "commissioner";
+        const syntheticNoPick =
+          undoingCommissionerOverride &&
+          currentPick?.teamId === "NO-PICK" &&
+          currentPick?.gameId ===
+            `W${current.settings.currentWeek}-NO-PICK`;
+
+        const picks = syntheticNoPick
+          ? item.picks.filter(
+              (pick) => pick.week !== current.settings.currentWeek,
             )
-          : item.picks;
-        const eliminated = result === "loss" || result === "tie" || result === "no-pick";
+          : hasCurrentPick
+            ? item.picks.map((pick) => {
+                if (pick.week !== current.settings.currentWeek) return pick;
+
+                if (undoingCommissionerOverride) {
+                  return {
+                    ...pick,
+                    result: "pending" as const,
+                    resolutionSource: undefined,
+                    resolvedAt: undefined,
+                  };
+                }
+
+                return {
+                  ...pick,
+                  result,
+                  resolutionSource: "commissioner" as const,
+                  resolvedAt,
+                };
+              })
+            : result === "no-pick"
+              ? [
+                  ...item.picks,
+                  {
+                    week: current.settings.currentWeek,
+                    gameId: `W${current.settings.currentWeek}-NO-PICK`,
+                    teamId: "NO-PICK",
+                    result: "no-pick" as const,
+                    submittedAt: resolvedAt,
+                    resolutionSource: "commissioner" as const,
+                    resolvedAt,
+                  },
+                ].sort((a, b) => a.week - b.week)
+              : item.picks;
+
+        const eliminated =
+          result === "loss" || result === "tie" || result === "no-pick";
+
         return {
           ...item,
           picks,
           status: eliminated ? "eliminated" : "active",
-          eliminatedWeek: eliminated ? current.settings.currentWeek : undefined,
+          eliminatedWeek: eliminated
+            ? current.settings.currentWeek
+            : undefined,
         };
       }),
     }));
-    showNotice(`${player.name}'s Week ${state.settings.currentWeek} result is ${result}.`);
-  };
 
+    showNotice(
+      result === "pending"
+        ? `${player.name}'s Week ${state.settings.currentWeek} override was undone.`
+        : `${player.name}'s Week ${state.settings.currentWeek} result is ${result}.`,
+    );
+  };
   const buyBack = (playerId: string) => {
     const player = state.players.find((item) => item.id === playerId);
     if (!player || player.status !== "eliminated") return;
@@ -639,12 +689,6 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
     showNotice(`Advanced to Week ${week + 1}.`);
   };
 
-  const resetDemo = () => {
-    setState(initialState);
-    setPage("home");
-    showNotice("Demo data reset.");
-  };
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -727,7 +771,6 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
                 settings: { ...current.settings, currentWeek: week },
               }))
             }
-            onReset={resetDemo}
             onCloseWeek={closeCurrentWeek}
             onAdvanceWeek={advanceToNextWeek}
             onAssignRole={assignCommissionerRole}
@@ -1101,7 +1144,6 @@ function CommissionerPage({
   onRecordEntry,
   onRemovePlayer,
   onSetWeek,
-  onReset,
   onCloseWeek,
   onAdvanceWeek,
   onAssignRole,
@@ -1116,7 +1158,6 @@ function CommissionerPage({
   onRecordEntry: (playerId: string) => void;
   onRemovePlayer: (playerId: string) => void;
   onSetWeek: (week: number) => void;
-  onReset: () => void;
   onCloseWeek: () => void;
   onAdvanceWeek: () => void;
   onAssignRole: (playerId: string, role: PlayerRole) => void;
@@ -1278,33 +1319,113 @@ function CommissionerPage({
       </article>
 
       <article className="panel">
-        <div className="panel-heading"><div><span className="eyebrow">Week {state.settings.currentWeek}</span><h2>Resolve player results</h2></div></div>
-        <div className="commissioner-list">
-          {state.players.map((player) => {
-            const pick = player.picks.find((item) => item.week === state.settings.currentWeek);
-            const canResolve = Boolean(pick);
-            const canBuyBack = player.status === "eliminated" && !buybacksClosed;
-            return (
-              <div className="commissioner-row" key={player.id}>
-                <div>
-                  <strong>{player.name}</strong>
-                  <small>{pick ? `${pick.teamId === "NO-PICK" ? "No pick" : `Picked ${getTeam(pick.teamId).abbreviation}`} · ${pick.result}` : "No weekly pick"}</small>
-                </div>
-                <StatusPill status={player.status} />
-                <div className="row-actions">
-                  <button onClick={() => onResolve(player.id, "win")} disabled={!canResolve}>Win</button>
-                  <button onClick={() => onResolve(player.id, "loss")} disabled={!canResolve}>Loss</button>
-                  <button onClick={() => onResolve(player.id, "tie")} disabled={!canResolve}>Tie</button>
-                  <button onClick={() => onResolve(player.id, "no-pick")} disabled={Boolean(pick) || !canResolve}>No Pick</button>
-                  {canBuyBack ? <button className="buyback-button" onClick={() => onBuyBack(player.id)}>Buy Back</button> : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </article>
+      <details className="panel override-panel">
+        <summary className="override-summary">
+          <div>
+            <span className="eyebrow">Commissioner safety</span>
+            <h2>Result Corrections &amp; Overrides</h2>
+            <p>
+              Automatic NFL scoring remains the normal process. Open these
+              controls only for provider errors, postponed games, cancellations,
+              or an approved correction.
+            </p>
+          </div>
+          <span className="override-summary__action">Open controls</span>
+        </summary>
 
-      <article className="panel">
+        <div className="override-body">
+          <p className="override-warning">
+            Every override requires confirmation. Win, Loss, and Tie require an
+            existing Week {state.settings.currentWeek} pick. No Pick can create
+            the missing-pick record for the current week.
+          </p>
+
+          <div className="override-list">
+            {state.players.map((player) => {
+              const pick = player.picks.find(
+                (item) => item.week === state.settings.currentWeek,
+              );
+
+              const requestOverride = (result: PickResult) => {
+                const resultLabel =
+                  result === "no-pick"
+                    ? "No Pick"
+                    : result.charAt(0).toUpperCase() + result.slice(1);
+                const warning =
+                  result === "pending"
+                    ? `Undo ${player.name}'s Week ${state.settings.currentWeek} ` +
+                      "commissioner override and restore the prior state?"
+                    : `Override ${player.name}'s Week ` +
+                      `${state.settings.currentWeek} result to ${resultLabel}?`;
+
+                if (window.confirm(warning)) {
+                  onResolve(player.id, result);
+                }
+              };
+
+              return (
+                <div className="override-player-row" key={player.id}>
+                  <div>
+                    <strong>{player.name}</strong>
+                    <small>
+                      {pick
+                        ? `${
+                            pick.teamId === "NO-PICK"
+                              ? "No pick"
+                              : `Picked ${getTeam(pick.teamId).abbreviation}`
+                          } · ${pick.result}`
+                        : "No weekly pick"}
+                    </small>
+                  </div>
+
+                  <div className="override-actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => requestOverride("win")}
+                      disabled={!pick || pick.result === "win"}
+                    >
+                      Win
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => requestOverride("loss")}
+                      disabled={!pick || pick.result === "loss"}
+                    >
+                      Loss
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => requestOverride("tie")}
+                      disabled={!pick || pick.result === "tie"}
+                    >
+                      Tie
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => requestOverride("no-pick")}
+                      disabled={pick?.result === "no-pick"}
+                    >
+                      No Pick
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => requestOverride("pending")}
+                      disabled={pick?.resolutionSource !== "commissioner"}
+                    >
+                      Undo Override
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </details>
         <div className="panel-heading"><div><span className="eyebrow">Money trail</span><h2>Payment ledger</h2></div><strong>{currency(prizePool)}</strong></div>
         {state.payments.length === 0 ? <p className="empty-state">No payments recorded.</p> : (
           <div className="payment-list">
@@ -1321,10 +1442,6 @@ function CommissionerPage({
         )}
       </article>
 
-      <article className="danger-zone">
-        <div><strong>Reset demonstration</strong><span>Restore the original three sample players and payments.</span></div>
-        <button onClick={onReset}>Reset Demo</button>
-      </article>
     </section>
   );
 }
