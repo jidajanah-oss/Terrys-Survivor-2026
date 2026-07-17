@@ -7,6 +7,7 @@ import type { PickResult, Player, PlayerRole, SurvivorState } from "./types/surv
 import { applyAutomaticResults, DemoNflResultProvider } from "./services/nflResultService";
 import { cloudConfigured } from "./config/runtime";
 import { CloudAuthGate } from "./features/auth/CloudAuthGate";
+import { RosterReadinessPanel } from "./features/commissioner/RosterReadinessPanel";
 import { assignCloudLeadership, type CloudMembership } from "./services/accountService";
 import { CloudSnapshotRepository } from "./services/cloudSnapshotRepository";
 import { LiveNflSyncService } from "./services/liveNflService";
@@ -449,6 +450,28 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
     );
   };
 
+  const updatePlayer = (playerId: string, name: string, email: string) => {
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const player = state.players.find((item) => item.id === playerId);
+
+    if (!player || !normalizedName) return;
+
+    setState((current) => ({
+      ...current,
+      players: current.players.map((item) =>
+        item.id === playerId
+          ? {
+              ...item,
+              name: normalizedName,
+              email: normalizedEmail,
+            }
+          : item,
+      ),
+    }));
+
+    showNotice(`${normalizedName}'s account details were updated.`);
+  };
   const recordEntryPayment = (playerId: string) => {
     const player = state.players.find((item) => item.id === playerId);
     if (!player) return;
@@ -685,6 +708,11 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
             {cloudIdentity ? (
               <CloudLeadershipPanel identity={cloudIdentity} onRefresh={refreshCloudIdentity} />
             ) : null}
+            <RosterReadinessPanel
+              players={state.players}
+              leagueId={cloudIdentity?.leagueId}
+              onUpdatePlayer={updatePlayer}
+            />
             <CommissionerPage
             state={state}
             prizePool={prizePool}
