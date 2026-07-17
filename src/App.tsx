@@ -1261,10 +1261,25 @@ function CommissionerPage({
         <strong className="pool-badge">Pool {currency(prizePool)}</strong>
       </div>
 
-      <article className="panel leadership-panel">
-        <div className="panel-heading"><div><span className="eyebrow">League leadership</span><h2>Commissioner assignments</h2></div></div>
-        <p>Exactly one Primary Commissioner and one Co-Commissioner receive Commissioner HQ access.</p>
-        <div className="leadership-grid">
+      <details className="panel leadership-panel leadership-collapsible">
+          <summary className="leadership-collapsible__summary">
+            <div>
+              <span className="eyebrow">League leadership</span>
+              <h2>Commissioner assignments</h2>
+            </div>
+            <span className="leadership-collapsible__state">
+              <span className="leadership-collapsible__open">Open controls</span>
+              <span className="leadership-collapsible__close">Close controls</span>
+            </span>
+          </summary>
+
+          <div className="leadership-collapsible__content">
+            <p>
+              Exactly one Primary Commissioner and one Co-Commissioner receive
+              Commissioner HQ access.
+            </p>
+
+            <div className="leadership-grid">
           {state.players.map((player) => (
             <div className="leadership-row" key={player.id}>
               <div><strong>{player.name}</strong><small>{player.email || "No email"}</small></div>
@@ -1276,7 +1291,8 @@ function CommissionerPage({
             </div>
           ))}
         </div>
-      </article>
+                </div>
+        </details>
 
       <div className="stats-grid">
         <StatCard label="Roster" value={state.players.length} note={`${activeCount} active`} />

@@ -1087,3 +1087,89 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+/* v16.1 - Collapsible Commissioner assignments */
+.leadership-collapsible {
+  padding: 0;
+  overflow: hidden;
+}
+
+.leadership-collapsible__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.leadership-collapsible__summary::-webkit-details-marker {
+  display: none;
+}
+
+.leadership-collapsible__summary:hover {
+  background: rgba(255, 182, 18, 0.055);
+}
+
+.leadership-collapsible__summary h2 {
+  margin: 4px 0 0;
+}
+
+.leadership-collapsible__state {
+  flex: 0 0 auto;
+  min-width: 126px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 182, 18, 0.52);
+  border-radius: 999px;
+  color: #ffe18a;
+  background: rgba(255, 182, 18, 0.08);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.leadership-collapsible__close {
+  display: none;
+}
+
+.leadership-collapsible[open] .leadership-collapsible__open {
+  display: none;
+}
+
+.leadership-collapsible[open] .leadership-collapsible__close {
+  display: inline;
+}
+
+.leadership-collapsible__content {
+  padding: 0 24px 24px;
+  border-top: 1px solid rgba(255, 182, 18, 0.18);
+}
+
+.leadership-collapsible__content > p {
+  margin-top: 20px;
+}
+
+@media (max-width: 620px) {
+  .leadership-collapsible__summary {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .leadership-collapsible__summary h2 {
+    font-size: 1.2rem;
+  }
+
+  .leadership-collapsible__state {
+    min-width: 98px;
+    padding: 8px 9px;
+    font-size: 0.6rem;
+  }
+
+  .leadership-collapsible__content {
+    padding: 0 16px 16px;
+  }
+}
