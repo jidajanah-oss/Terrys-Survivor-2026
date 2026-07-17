@@ -1134,7 +1134,7 @@ function BoardPage({
                             currentPick.teamId === "NO-PICK"
                               ? "â€”"
                               : getTeam(currentPick.teamId).abbreviation
-                          } Â· ${currentPick.result}`
+                          } - ${currentPick.result}`
                         : "No pick"}
                     </td>
                     <td>{usedTeams.join(", ") || "None"}</td>
