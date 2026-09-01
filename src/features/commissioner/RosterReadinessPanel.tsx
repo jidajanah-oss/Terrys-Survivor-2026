@@ -264,17 +264,48 @@ export function RosterReadinessPanel({
           : `${finalName} was updated. An email is still needed.`,
       );
     } catch (error) {
-      const detail =
-        error instanceof Error
-          ? error.message
-          : error &&
-              typeof error === "object" &&
-              "message" in error
-            ? String(
-                (error as { message?: unknown }).message ??
-                  "The player account details could not be saved.",
-              )
-            : "The player account details could not be saved.";
+      let detail =
+        "The player account details could not be saved.";
+
+      if (error instanceof Error) {
+        detail = error.message;
+      } else if (
+        error &&
+        typeof error === "object"
+      ) {
+        const cloudError = error as {
+          message?: unknown;
+          details?: unknown;
+          hint?: unknown;
+          code?: unknown;
+        };
+
+        const parts = [
+          cloudError.message,
+          cloudError.details,
+          cloudError.hint,
+          cloudError.code,
+        ]
+          .filter(
+            (value) =>
+              value !== undefined &&
+              value !== null &&
+              String(value).trim() !== "",
+          )
+          .map(String);
+
+        if (parts.length > 0) {
+          detail = parts.join(" | ");
+        } else {
+          try {
+            detail = JSON.stringify(error);
+          } catch {
+            detail = String(error);
+          }
+        }
+      } else if (error != null) {
+        detail = String(error);
+      }
 
       console.error(
         "[RosterReadinessPanel] Player save failed:",
