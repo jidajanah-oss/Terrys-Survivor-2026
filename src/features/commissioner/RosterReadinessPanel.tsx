@@ -264,11 +264,24 @@ export function RosterReadinessPanel({
           : `${finalName} was updated. An email is still needed.`,
       );
     } catch (error) {
-      setMessage(
+      const detail =
         error instanceof Error
           ? error.message
-          : "The player account details could not be saved.",
+          : error &&
+              typeof error === "object" &&
+              "message" in error
+            ? String(
+                (error as { message?: unknown }).message ??
+                  "The player account details could not be saved.",
+              )
+            : "The player account details could not be saved.";
+
+      console.error(
+        "[RosterReadinessPanel] Player save failed:",
+        error,
       );
+
+      setMessage(detail);
     } finally {
       setSavingPlayerId(null);
     }
