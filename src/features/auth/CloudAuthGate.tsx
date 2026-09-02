@@ -63,8 +63,25 @@ export function CloudAuthGate({
   async function refreshMembership() {
     let found = await getMyMembership();
 
-    if (!found) {
+    for (
+      let attempt = 0;
+      !found && attempt < 3;
+      attempt += 1
+    ) {
       found = await claimMembershipByEmail();
+
+      if (!found && attempt < 2) {
+        await new Promise((resolve) =>
+          window.setTimeout(
+            resolve,
+            250 * (attempt + 1),
+          ),
+        );
+      }
+    }
+
+    if (!found) {
+      found = await getMyMembership();
     }
 
     setMembership(found);
