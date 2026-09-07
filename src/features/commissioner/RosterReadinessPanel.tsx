@@ -207,23 +207,12 @@ export function RosterReadinessPanel({
     const finalEmail = linked ? entry.email : email;
 
     if (!finalName) {
-      setMessage("Enter the player name.");
+      setMessage("Enter the entry name.");
       return;
     }
 
     if (!validEmail(finalEmail)) {
       setMessage("Enter a valid email address.");
-      return;
-    }
-
-    const duplicateEmail = entries.some(
-      (other) =>
-        other.player.id !== entry.player.id &&
-        finalEmail !== "" &&
-        normalize(other.email) === normalize(finalEmail),
-    );
-    if (duplicateEmail) {
-      setMessage("That email is already assigned to another survivor entry.");
       return;
     }
 
@@ -233,7 +222,7 @@ export function RosterReadinessPanel({
         normalize(other.player.name) === normalize(finalName),
     );
     if (duplicateName) {
-      setMessage("That player name is already in the roster.");
+      setMessage("That entry name is already in the Survivor league.");
       return;
     }
 
@@ -400,8 +389,8 @@ export function RosterReadinessPanel({
           <span className="eyebrow">Player accounts</span>
           <h2>Account readiness</h2>
           <p>
-            Add player emails, send secure magic-link invitations, and confirm
-            who has completed account linking.
+            Assign owner emails to Survivor entries, send secure sign-in invitations,
+            and confirm which entries are linked. One email may own multiple uniquely named entries.
           </p>
         </div>
 
@@ -525,7 +514,7 @@ export function RosterReadinessPanel({
                     onSubmit={(event: FormEvent) => void saveEdit(event, entry)}
                   >
                     <label>
-                      Name
+                      Entry name
                       <input
                         value={draftName}
                         onChange={(event: ChangeEvent<HTMLInputElement>) =>

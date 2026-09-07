@@ -108,11 +108,40 @@ function normalizeState(value: SurvivorState): SurvivorState {
 
 function applyCloudViewer(state: SurvivorState, identity?: CloudMembership | null): SurvivorState {
   if (!identity) return state;
-  const match = state.players.find((player) =>
-    (identity.email && player.email.toLowerCase() === identity.email.toLowerCase())
-    || player.name.toLowerCase() === identity.displayName.toLowerCase()
+
+  const entryName = identity.displayName.trim().toLowerCase();
+
+  const nameMatch = state.players.find(
+    (player) =>
+      player.name.trim().toLowerCase() === entryName,
   );
-  return match ? { ...state, selectedPlayerId: match.id } : state;
+
+  if (nameMatch) {
+    return {
+      ...state,
+      selectedPlayerId: nameMatch.id,
+    };
+  }
+
+  if (identity.email) {
+    const accountEmail =
+      identity.email.trim().toLowerCase();
+
+    const emailMatches = state.players.filter(
+      (player) =>
+        player.email.trim().toLowerCase() ===
+        accountEmail,
+    );
+
+    if (emailMatches.length === 1) {
+      return {
+        ...state,
+        selectedPlayerId: emailMatches[0].id,
+      };
+    }
+  }
+
+  return state;
 }
 
 function loadState(): SurvivorState {
@@ -157,10 +186,19 @@ function loadState(): SurvivorState {
 
 interface SurvivorAppProps {
   cloudIdentity?: CloudMembership | null;
+  cloudIdentities?: CloudMembership[];
   refreshCloudIdentity?: () => Promise<void>;
+  selectCloudIdentity?: (memberId: string) => void;
+  signOutAccount?: () => Promise<void>;
 }
 
-function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) {
+function SurvivorApp({
+  cloudIdentity,
+  cloudIdentities = [],
+  refreshCloudIdentity,
+  selectCloudIdentity,
+  signOutAccount,
+}: SurvivorAppProps) {
   const [page, setPage] = useState<Page>("home");
   const [state, setState] = useState<SurvivorState>(loadState);
   const [notice, setNotice] = useState("");
@@ -254,13 +292,63 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
   }, [cloudIdentity?.leagueId, cloudReady, cloudSyncStatus]);
 
   useEffect(() => {
-    const viewer = state.players.find((player) => player.id === state.selectedPlayerId);
-    const allowed = viewer?.role === "primary-commissioner" || viewer?.role === "co-commissioner";
-    if (page === "commissioner" && !allowed) setPage("home");
-  }, [page, state.players, state.selectedPlayerId]);
+    const viewer = state.players.find(
+      (player) =>
+        player.id === state.selectedPlayerId,
+    );
 
-  const selectedPlayer = state.players.find((player) => player.id === state.selectedPlayerId) ?? state.players[0];
-  const hasCommissionerAccess = selectedPlayer?.role === "primary-commissioner" || selectedPlayer?.role === "co-commissioner";
+    const localAllowed =
+      viewer?.role === "primary-commissioner" ||
+      viewer?.role === "co-commissioner";
+
+    const cloudAllowed = cloudIdentities.some(
+      (entry) =>
+        entry.role === "primary-commissioner" ||
+        entry.role === "co-commissioner",
+    );
+
+    const allowed = cloudIdentity
+      ? cloudAllowed
+      : localAllowed;
+
+    if (
+      page === "commissioner" &&
+      !allowed
+    ) {
+      setPage("home");
+    }
+  }, [
+    cloudIdentities,
+    cloudIdentity,
+    page,
+    state.players,
+    state.selectedPlayerId,
+  ]);
+
+  const selectedPlayer =
+    state.players.find(
+      (player) =>
+        player.id === state.selectedPlayerId,
+    ) ?? state.players[0];
+
+  const accountCommissionerIdentity =
+    cloudIdentities.find(
+      (entry) =>
+        entry.role === "primary-commissioner" ||
+        entry.role === "co-commissioner",
+    ) ??
+    (cloudIdentity &&
+    (cloudIdentity.role === "primary-commissioner" ||
+      cloudIdentity.role === "co-commissioner")
+      ? cloudIdentity
+      : undefined);
+
+  const hasCommissionerAccess = cloudIdentity
+    ? Boolean(accountCommissionerIdentity)
+    : selectedPlayer?.role ===
+        "primary-commissioner" ||
+      selectedPlayer?.role ===
+        "co-commissioner";
   const prizePool = state.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const activeCount = state.players.filter((player) => player.status === "active").length;
   const eliminatedCount = state.players.length - activeCount;
@@ -700,10 +788,67 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
           </span>
         </button>
         {cloudIdentity ? (
-          <div className="cloud-identity">
-            <small>Signed in as</small>
-            <strong>{cloudIdentity.displayName} · {cloudIdentity.role === "primary-commissioner" ? "Primary" : cloudIdentity.role === "co-commissioner" ? "Co-Commish" : "Player"}</strong>
-            <span className={`cloud-sync cloud-sync--${cloudSyncStatus}`}>{cloudSyncStatus === "loading" ? "Loading cloud data…" : cloudSyncStatus === "saving" ? "Saving…" : cloudSyncStatus === "saved" ? "Cloud saved" : cloudSyncStatus === "error" ? "Cloud sync error" : "Local mode"}</span>
+          <div className="cloud-account-tools">
+            <label className="cloud-entry-switcher">
+              <small>Current Entry</small>
+
+              <select
+                aria-label="Current Survivor entry"
+                value={cloudIdentity.memberId}
+                onChange={(event) =>
+                  selectCloudIdentity?.(
+                    event.target.value,
+                  )
+                }
+              >
+                {cloudIdentities.map((entry) => (
+                  <option
+                    key={entry.memberId}
+                    value={entry.memberId}
+                  >
+                    {entry.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="cloud-identity">
+              <small>Signed in account</small>
+
+              <strong>
+                {accountCommissionerIdentity?.role ===
+                "primary-commissioner"
+                  ? "Primary Commissioner"
+                  : accountCommissionerIdentity?.role ===
+                      "co-commissioner"
+                    ? "Co-Commissioner"
+                    : "Player"}
+              </strong>
+
+              <span
+                className={`cloud-sync cloud-sync--${cloudSyncStatus}`}
+              >
+                {cloudSyncStatus === "loading"
+                  ? "Loading cloud data?"
+                  : cloudSyncStatus === "saving"
+                    ? "Saving?"
+                    : cloudSyncStatus === "saved"
+                      ? "Cloud saved"
+                      : cloudSyncStatus === "error"
+                        ? "Cloud sync error"
+                        : "Local mode"}
+              </span>
+            </div>
+
+            <button
+              className="sign-out-button"
+              type="button"
+              onClick={() =>
+                void signOutAccount?.()
+              }
+            >
+              Sign Out
+            </button>
           </div>
         ) : (
           <label className="player-switcher">
@@ -749,8 +894,15 @@ function SurvivorApp({ cloudIdentity, refreshCloudIdentity }: SurvivorAppProps) 
         {page === "board" ? <BoardPage state={state} showPayments={hasCommissionerAccess} /> : null}
         {page === "commissioner" && hasCommissionerAccess ? (
           <>
-            {cloudIdentity ? (
-              <CloudLeadershipPanel identity={cloudIdentity} onRefresh={refreshCloudIdentity} />
+            {accountCommissionerIdentity ? (
+              <CloudLeadershipPanel
+                identity={
+                  accountCommissionerIdentity
+                }
+                onRefresh={
+                  refreshCloudIdentity
+                }
+              />
             ) : null}
             <RosterReadinessPanel
               players={state.players}
@@ -1524,7 +1676,28 @@ function CommissionerPage({
 function App() {
   return (
     <CloudAuthGate>
-      {(identity, _session, refreshIdentity) => <SurvivorApp cloudIdentity={identity} refreshCloudIdentity={refreshIdentity} />}
+      {(
+        identity,
+        identities,
+        _session,
+        refreshIdentity,
+        selectIdentity,
+        signOutAccount,
+      ) => (
+        <SurvivorApp
+          cloudIdentity={identity}
+          cloudIdentities={identities}
+          refreshCloudIdentity={
+            refreshIdentity
+          }
+          selectCloudIdentity={
+            selectIdentity
+          }
+          signOutAccount={
+            signOutAccount
+          }
+        />
+      )}
     </CloudAuthGate>
   );
 }

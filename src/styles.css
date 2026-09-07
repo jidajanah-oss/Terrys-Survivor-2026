@@ -1173,3 +1173,85 @@ footer {
     padding: 0 16px 16px;
   }
 }
+
+
+/* Survivor multi-entry account controls */
+.cloud-account-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.cloud-entry-switcher {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+}
+
+.cloud-entry-switcher small,
+.cloud-identity small {
+  color: #8fa6bc;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+
+.cloud-entry-switcher select {
+  min-width: 190px;
+  color: #eef5fb;
+  background: #101d2b;
+  border: 1px solid #31465b;
+  border-radius: 10px;
+  padding: 9px 34px 9px 12px;
+}
+
+.cloud-identity {
+  display: grid;
+  gap: 3px;
+}
+
+.cloud-identity strong {
+  white-space: nowrap;
+}
+
+.sign-out-button {
+  border: 1px solid #385169;
+  border-radius: 10px;
+  padding: 10px 13px;
+  background: #122131;
+  color: #eef5fb;
+  font-weight: 750;
+}
+
+.sign-out-button:hover {
+  border-color: #f6c453;
+}
+
+@media (max-width: 760px) {
+  .cloud-account-tools {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .cloud-entry-switcher {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .cloud-entry-switcher select {
+    width: 100%;
+  }
+
+  .cloud-identity {
+    min-width: 0;
+  }
+
+  .sign-out-button {
+    align-self: end;
+  }
+}

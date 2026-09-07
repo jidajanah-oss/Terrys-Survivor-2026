@@ -18,19 +18,25 @@ import {
 import {
   bootstrapLeague,
   claimMembershipByEmail,
-  getMyMembership,
+  getMyMemberships,
   type CloudMembership,
 } from "../../services/accountService";
 
 interface CloudAuthGateProps {
   children: (
     identity: CloudMembership | null,
+    identities: CloudMembership[],
     session: Session | null,
     refreshIdentity: () => Promise<void>,
+    selectIdentity: (memberId: string) => void,
+    signOutAccount: () => Promise<void>,
   ) => ReactNode;
 }
 
 type SignInStep = "email" | "code";
+
+const ACTIVE_ENTRY_STORAGE_KEY =
+  "terrys-survivor-active-entry-v1";
 
 function errorMessage(
   error: unknown,
@@ -45,6 +51,8 @@ export function CloudAuthGate({
   const [session, setSession] = useState<Session | null>(null);
   const [membership, setMembership] =
     useState<CloudMembership | null>(null);
+  const [memberships, setMemberships] =
+    useState<CloudMembership[]>([]);
   const [loading, setLoading] = useState(cloudConfigured);
   const [email, setEmail] = useState("");
   const [requestedEmail, setRequestedEmail] = useState("");
@@ -61,16 +69,43 @@ export function CloudAuthGate({
   );
 
   async function refreshMembership() {
-    let found = await getMyMembership();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await claimMembershipByEmail();
 
-    for (
-      let attempt = 0;
-      !found && attempt < 3;
-      attempt += 1
-    ) {
-      found = await claimMembershipByEmail();
+      const found = await getMyMemberships();
 
-      if (!found && attempt < 2) {
+      if (found.length > 0) {
+        setMemberships(found);
+
+        setMembership((current) => {
+          const savedMemberId =
+            window.localStorage.getItem(
+              ACTIVE_ENTRY_STORAGE_KEY,
+            );
+
+          const selected =
+            found.find(
+              (entry) =>
+                entry.memberId === current?.memberId,
+            ) ??
+            found.find(
+              (entry) =>
+                entry.memberId === savedMemberId,
+            ) ??
+            found[0];
+
+          window.localStorage.setItem(
+            ACTIVE_ENTRY_STORAGE_KEY,
+            selected.memberId,
+          );
+
+          return selected;
+        });
+
+        return;
+      }
+
+      if (attempt < 2) {
         await new Promise((resolve) =>
           window.setTimeout(
             resolve,
@@ -80,11 +115,8 @@ export function CloudAuthGate({
       }
     }
 
-    if (!found) {
-      found = await getMyMembership();
-    }
-
-    setMembership(found);
+    setMemberships([]);
+    setMembership(null);
   }
 
   useEffect(() => {
@@ -136,6 +168,7 @@ export function CloudAuthGate({
           });
         } else {
           setMembership(null);
+          setMemberships([]);
         }
       },
     );
@@ -229,6 +262,49 @@ export function CloudAuthGate({
     setMessage("");
   }
 
+  function selectIdentity(memberId: string) {
+    const selected = memberships.find(
+      (entry) => entry.memberId === memberId,
+    );
+
+    if (!selected) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      ACTIVE_ENTRY_STORAGE_KEY,
+      selected.memberId,
+    );
+    setMembership(selected);
+    setMessage("");
+  }
+
+  async function signOutAccount() {
+    setBusy(true);
+    setMessage("");
+
+    try {
+      await signOut();
+      window.localStorage.removeItem(
+        ACTIVE_ENTRY_STORAGE_KEY,
+      );
+      setMembership(null);
+      setMemberships([]);
+      setOtpCode("");
+      setRequestedEmail("");
+      setSignInStep("email");
+    } catch (error: unknown) {
+      setMessage(
+        errorMessage(
+          error,
+          "Unable to sign out.",
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createLeague() {
     setMessage("");
 
@@ -238,6 +314,11 @@ export function CloudAuthGate({
       );
 
       setMembership(linked);
+      setMemberships([linked]);
+      window.localStorage.setItem(
+        ACTIVE_ENTRY_STORAGE_KEY,
+        linked.memberId,
+      );
       setMessage(
         "Cloud league created. This account is the Primary Commissioner.",
       );
@@ -252,7 +333,7 @@ export function CloudAuthGate({
   }
 
   if (!cloudConfigured) {
-    return <>{children(null, null, async () => {})}</>;
+    return <>{children(null, [], null, async () => {}, () => {}, async () => {})}</>;
   }
 
   if (loading) {
@@ -416,7 +497,7 @@ export function CloudAuthGate({
 
           <p>
             <strong>{signedInEmail}</strong> is authenticated,
-            but no matching player record is linked yet.
+            but no matching Survivor entry is linked yet.
           </p>
 
           <button
@@ -462,7 +543,8 @@ export function CloudAuthGate({
 
           <button
             className="text-button"
-            onClick={() => signOut()}
+            disabled={busy}
+            onClick={() => void signOutAccount()}
           >
             Sign out
           </button>
@@ -481,8 +563,11 @@ export function CloudAuthGate({
     <>
       {children(
         membership,
+        memberships,
         session,
         refreshMembership,
+        selectIdentity,
+        signOutAccount,
       )}
     </>
   );

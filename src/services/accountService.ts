@@ -62,16 +62,34 @@ export function matchLeagueRosterMembership(
   const playerEmail = normalize(player.email);
   const playerName = normalize(player.name);
 
-  return memberships.find((membership) => {
-    const emailMatches =
-      playerEmail !== "" && normalize(membership.email) === playerEmail;
-    const nameMatches =
-      playerName !== "" && normalize(membership.displayName) === playerName;
-    const leadershipMatches =
-      player.role !== "player" && membership.role === player.role;
+  const nameMatch = memberships.find(
+    (membership) =>
+      playerName !== "" &&
+      normalize(membership.displayName) === playerName,
+  );
 
-    return emailMatches || nameMatches || leadershipMatches;
-  });
+  if (nameMatch) {
+    return nameMatch;
+  }
+
+  if (playerEmail !== "") {
+    const emailMatches = memberships.filter(
+      (membership) =>
+        normalize(membership.email) === playerEmail,
+    );
+
+    if (emailMatches.length === 1) {
+      return emailMatches[0];
+    }
+  }
+
+  if (player.role !== "player") {
+    return memberships.find(
+      (membership) => membership.role === player.role,
+    );
+  }
+
+  return undefined;
 }
 
 export async function claimMembershipByEmail(): Promise<CloudMembership | null> {
@@ -97,6 +115,20 @@ export async function getMyMembership(): Promise<CloudMembership | null> {
   if (error) throw error;
 
   return data ? (data as unknown as CloudMembership) : null;
+}
+
+export async function getMyMemberships(): Promise<CloudMembership[]> {
+  const client = getSupabaseClient();
+  if (!client) return [];
+
+  const { data, error } = await (client as any).rpc(
+    "get_my_survivor_memberships",
+  );
+  if (error) throw error;
+
+  return Array.isArray(data)
+    ? (data as unknown as CloudMembership[])
+    : [];
 }
 
 export async function bootstrapLeague(
@@ -224,10 +256,22 @@ export async function ensureLeagueRosterMemberships(
   players: Player[],
 ): Promise<LeagueRosterMembership[]> {
   let memberships = await listLeagueRosterMemberships(leagueId);
+  const matchedMembershipIds = new Set<string>();
 
   for (const player of players) {
-    const match = matchLeagueRosterMembership(player, memberships);
-    if (match) continue;
+    const availableMemberships = memberships.filter(
+      (membership) => !matchedMembershipIds.has(membership.id),
+    );
+
+    const match = matchLeagueRosterMembership(
+      player,
+      availableMemberships,
+    );
+
+    if (match) {
+      matchedMembershipIds.add(match.id);
+      continue;
+    }
 
     const created = await saveLeagueRosterMembership({
       leagueId,
@@ -237,7 +281,9 @@ export async function ensureLeagueRosterMemberships(
       status: player.status,
       buybacks: player.buybacks,
     });
+
     memberships = [...memberships, created];
+    matchedMembershipIds.add(created.id);
   }
 
   return listLeagueRosterMemberships(leagueId);
