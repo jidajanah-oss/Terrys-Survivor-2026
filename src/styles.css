@@ -1255,3 +1255,122 @@ footer {
     align-self: end;
   }
 }
+
+
+/* Multi-entry mobile header refinement */
+@media (max-width: 760px) {
+  .topbar {
+    min-height: auto;
+    padding: 9px 11px 10px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .brand {
+    width: 100%;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .brand__logo {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+  }
+
+  .brand strong {
+    font-size: .92rem;
+    white-space: nowrap;
+  }
+
+  .cloud-account-tools {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: 5px 8px;
+    align-items: stretch;
+  }
+
+  .cloud-entry-switcher {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
+    gap: 3px;
+  }
+
+  .cloud-entry-switcher small {
+    font-size: .58rem;
+  }
+
+  .cloud-entry-switcher select {
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    padding: 7px 32px 7px 11px;
+    border-radius: 9px;
+    font-size: .92rem;
+  }
+
+  .cloud-identity {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .cloud-identity small {
+    display: none;
+  }
+
+  .cloud-identity strong {
+    max-width: none;
+    overflow: visible;
+    font-size: .68rem;
+    text-overflow: clip;
+    white-space: nowrap;
+    color: #c7cbce;
+  }
+
+  .cloud-sync {
+    display: inline;
+    margin: 0;
+    font-size: .62rem;
+    white-space: nowrap;
+  }
+
+  .sign-out-button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    min-width: 82px;
+    padding: 8px 11px;
+    border-radius: 9px;
+    font-size: .78rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .brand strong {
+    font-size: .84rem;
+  }
+
+  .sign-out-button {
+    min-width: 76px;
+    padding-inline: 8px;
+    font-size: .72rem;
+  }
+}
