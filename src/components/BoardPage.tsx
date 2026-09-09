@@ -86,7 +86,6 @@ export function BoardPage({
                   <tr key={player.id}>
                     <td>
                       <strong>{player.name}</strong>
-                      <small>{player.email || "No email"}</small>
                     </td>
                     {showPayments ? (
                       <td>

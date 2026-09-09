@@ -987,6 +987,12 @@ footer {
 
   .board-table th:first-child,
   .board-table td:first-child {
+    box-sizing: border-box;
+    width: 112px;
+    min-width: 112px;
+    max-width: 112px;
+    white-space: normal;
+    overflow-wrap: anywhere;
     position: sticky;
     left: 0;
     z-index: 2;
@@ -997,13 +1003,6 @@ footer {
   .board-table th:first-child {
     z-index: 3;
     background: #1e2023;
-  }
-
-  .board-table td small {
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .history-list > div {

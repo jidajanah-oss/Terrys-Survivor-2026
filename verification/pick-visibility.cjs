@@ -41,6 +41,8 @@ try {
   for (const showPayments of [false, true]) {
     Date.now = () => kickoff - 1;
     const hidden = renderToStaticMarkup(React.createElement(BoardPage, { state, showPayments }));
+    assert.ok(!hidden.includes('No email'));
+    assert.ok(!hidden.includes('<small>'));
     assert.equal((hidden.match(/Hidden until kickoff/g) || []).length, 3);
     for (const team of ['LAC', 'DET', 'KC']) assert.ok(!hidden.includes(team));
     assert.ok(hidden.includes('BUF'));
