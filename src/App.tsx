@@ -1,3 +1,4 @@
+import { reconcileEntry } from "../supabase/functions/_shared/survivorStatus";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BoardPage } from "./components/BoardPage";
 import { StatCard } from "./components/StatCard";
@@ -8,6 +9,7 @@ import type { PickResult, Player, PlayerRole, SurvivorState } from "./types/surv
 import { applyAutomaticResults, DemoNflResultProvider } from "./services/nflResultService";
 import { cloudConfigured } from "./config/runtime";
 import { CloudAuthGate } from "./features/auth/CloudAuthGate";
+import { PinAccessPanel } from "./features/commissioner/PinAccessPanel";
 import { RosterReadinessPanel } from "./features/commissioner/RosterReadinessPanel";
 import { assignCloudLeadership, type CloudMembership } from "./services/accountService";
 import { CloudSnapshotRepository } from "./services/cloudSnapshotRepository";
@@ -28,7 +30,7 @@ function currency(value: number) {
 }
 
 function normalizeState(value: SurvivorState): SurvivorState {
-  const savedPlayers = Array.isArray(value.players) ? value.players : initialState.players;
+  const savedPlayers = Array.isArray(value.players) ? value.players : [];
   const normalizedPlayers = savedPlayers.map((player) => ({
     ...player,
     email: player.email ?? "",
@@ -95,7 +97,7 @@ function normalizeState(value: SurvivorState): SurvivorState {
 
   return {
     settings: { ...initialState.settings, ...value.settings },
-    players: normalizedPlayers,
+    players: normalizedPlayers.map(player => reconcileEntry(player, value.payments ?? [])),
     payments: Array.isArray(value.payments) ? value.payments : [],
     selectedPlayerId,
     closedWeeks: Array.isArray(value.closedWeeks) ? value.closedWeeks : [],
@@ -227,7 +229,7 @@ function SurvivorApp({
       .then(async (cloudState) => {
         if (!active) return;
         const next = applyCloudViewer(
-          cloudState ? normalizeState(cloudState) : normalizeState(loadState()),
+          cloudState ? normalizeState(cloudState) : normalizeState({ ...initialState, players: [], payments: [], selectedPlayerId: "" }),
           cloudIdentity,
         );
         setState(next);
@@ -500,17 +502,7 @@ function SurvivorApp({
                 ].sort((a, b) => a.week - b.week)
               : item.picks;
 
-        const eliminated =
-          result === "loss" || result === "tie" || result === "no-pick";
-
-        return {
-          ...item,
-          picks,
-          status: eliminated ? "eliminated" : "active",
-          eliminatedWeek: eliminated
-            ? current.settings.currentWeek
-            : undefined,
-        };
+        return reconcileEntry({ ...item, picks }, current.payments);
       }),
     }));
 
@@ -532,7 +524,7 @@ function SurvivorApp({
       ...current,
       players: current.players.map((item) =>
         item.id === playerId
-          ? { ...item, status: "active", buybacks: item.buybacks + 1, eliminatedWeek: undefined }
+          ? { ...item, status: "active", buybacks: item.buybacks + 1, restoredThroughWeek: Math.max(item.restoredThroughWeek ?? 0, item.eliminatedWeek ?? 0), eliminatedWeek: undefined }
           : item,
       ),
       payments: [
@@ -910,6 +902,7 @@ function SurvivorApp({
               leagueId={cloudIdentity?.leagueId}
               onUpdatePlayer={updatePlayer}
             />
+            {cloudIdentity?.leagueId ? <PinAccessPanel leagueId={cloudIdentity.leagueId} /> : null}
             <CommissionerPage
             state={state}
             prizePool={prizePool}

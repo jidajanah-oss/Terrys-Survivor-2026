@@ -53,6 +53,7 @@ export interface Player {
   buybacks: number;
   joinedAt: string;
   eliminatedWeek?: number;
+  restoredThroughWeek?: number;
 }
 
 export interface LeagueSettings {

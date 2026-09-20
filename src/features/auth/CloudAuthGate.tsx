@@ -8,6 +8,7 @@ import {
 import type { Session } from "@supabase/supabase-js";
 
 import { cloudConfigured } from "../../config/runtime";
+import { signInWithPin } from "../../services/pinAccessService";
 import {
   getCurrentSession,
   sendEmailOtp,
@@ -33,7 +34,7 @@ interface CloudAuthGateProps {
   ) => ReactNode;
 }
 
-type SignInStep = "email" | "code";
+type SignInStep = "pin" | "email" | "code";
 
 const ACTIVE_ENTRY_STORAGE_KEY =
   "terrys-survivor-active-entry-v1";
@@ -57,8 +58,10 @@ export function CloudAuthGate({
   const [email, setEmail] = useState("");
   const [requestedEmail, setRequestedEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
+  const [entryName, setEntryName] = useState("");
+  const [pin, setPin] = useState("");
   const [signInStep, setSignInStep] =
-    useState<SignInStep>("email");
+    useState<SignInStep>("pin");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [displayName, setDisplayName] = useState("Terry");
@@ -221,6 +224,24 @@ export function CloudAuthGate({
     );
   }
 
+  async function verifyPin(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const nextSession = await signInWithPin(entryName, pin, (memberId) => {
+        window.localStorage.setItem(ACTIVE_ENTRY_STORAGE_KEY, memberId);
+      });
+      setSession(nextSession);
+      await refreshMembership();
+    } catch (error) {
+      setMessage(errorMessage(error, "Unable to sign in. Try email sign-in."));
+    } finally {
+      setPin("");
+      setBusy(false);
+    }
+  }
+
   async function verifyCode(event: FormEvent) {
     event.preventDefault();
 
@@ -292,7 +313,8 @@ export function CloudAuthGate({
       setMemberships([]);
       setOtpCode("");
       setRequestedEmail("");
-      setSignInStep("email");
+      setPin("");
+      setSignInStep("pin");
     } catch (error: unknown) {
       setMessage(
         errorMessage(
@@ -347,6 +369,34 @@ export function CloudAuthGate({
     );
   }
 
+  if (!session && signInStep === "pin") {
+    return (
+      <div className="auth-screen">
+        <form className="auth-card" onSubmit={verifyPin}>
+          <img src={`${import.meta.env.BASE_URL}terrys-survivor-2026-logo.png`} alt="Terry's Survivor 2026" />
+          <span className="eyebrow">Welcome back</span>
+          <h1>Sign in with your PIN</h1>
+          <p>Enter your Survivor entry name and the four-digit PIN Terry or Jimbo set for you.</p>
+          <label>Survivor entry name
+            <input autoComplete="username" disabled={busy} required maxLength={120}
+              autoCapitalize="none" spellCheck={false} value={entryName}
+              onChange={event => setEntryName(event.target.value)} placeholder="Your entry name" />
+          </label>
+          <label>4-digit PIN
+            <input type="password" inputMode="numeric" autoComplete="current-password"
+              pattern="[0-9]{4}" maxLength={4} required disabled={busy} value={pin}
+              onChange={event => setPin(event.target.value.replace(/[^0-9]/g, "").slice(0, 4))} />
+          </label>
+          <button className="primary-button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign In"}</button>
+          <button className="secondary-button" type="button" disabled={busy}
+            onClick={() => { setPin(""); setMessage(""); setSignInStep("email"); }}>Use Email Instead</button>
+          <p>No PIN, or forgot it? Ask Terry or Jimbo to set or reset it. Commissioner accounts use email sign-in.</p>
+          {message ? <div className="auth-message" role="status">{message}</div> : null}
+        </form>
+      </div>
+    );
+  }
+
   if (!session && signInStep === "email") {
     return (
       <div className="auth-screen">
@@ -389,6 +439,9 @@ export function CloudAuthGate({
               ? "Sending Verification Code…"
               : "Send Verification Code"}
           </button>
+
+          <button className="secondary-button" type="button" disabled={busy}
+            onClick={() => { setMessage(""); setSignInStep("pin"); }}>Use PIN Instead</button>
 
           {message ? (
             <div className="auth-message" aria-live="polite">

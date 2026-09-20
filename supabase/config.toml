@@ -1,2 +1,6 @@
 [functions.sync-nfl-week]
 verify_jwt = false
+
+[functions.survivor-pin-access]
+# Login is anonymous. Management actions validate the bearer token in the handler.
+verify_jwt = false

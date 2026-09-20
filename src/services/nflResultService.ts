@@ -1,3 +1,4 @@
+import { reconcileEntry } from "../../supabase/functions/_shared/survivorStatus";
 import { getDemoGamesForWeek } from "../data/nfl";
 import type { PickResult, SurvivorState } from "../types/survivor";
 
@@ -38,17 +39,14 @@ export function applyAutomaticResults(state: SurvivorState, finals: FinalGameRes
     nflProvider: "demo",
     players: state.players.map((player) => {
       const pick = player.picks.find((item) => item.week === week);
-      if (!pick || pick.result !== "pending") return player;
+      if (!pick || pick.result !== "pending") return reconcileEntry(player, state.payments);
       const game = byGame.get(pick.gameId) ?? finals.find(
         (item) => item.awayTeamId === pick.teamId || item.homeTeamId === pick.teamId,
       );
-      if (!game) return player;
+      if (!game) return reconcileEntry(player, state.payments);
       const result: PickResult = game.tied ? "tie" : game.winnerTeamId === pick.teamId ? "win" : "loss";
-      const eliminated = result === "loss" || result === "tie";
-      return {
+      return reconcileEntry({
         ...player,
-        status: eliminated ? "eliminated" : player.status,
-        eliminatedWeek: eliminated ? week : player.eliminatedWeek,
         picks: player.picks.map((item) => item.week === week ? {
           ...item,
           gameId: game.gameId,
@@ -56,7 +54,7 @@ export function applyAutomaticResults(state: SurvivorState, finals: FinalGameRes
           resolutionSource: "automatic",
           resolvedAt,
         } : item),
-      };
+      }, state.payments);
     }),
   };
 }
