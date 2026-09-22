@@ -524,7 +524,18 @@ function SurvivorApp({
       ...current,
       players: current.players.map((item) =>
         item.id === playerId
-          ? { ...item, status: "active", buybacks: item.buybacks + 1, restoredThroughWeek: Math.max(item.restoredThroughWeek ?? 0, item.eliminatedWeek ?? 0), eliminatedWeek: undefined }
+          ? {
+              ...item,
+              status: "active",
+              buybacks: item.buybacks + 1,
+              restoredThroughWeek: Math.max(
+                item.restoredThroughWeek ?? 0,
+                item.eliminatedWeek ?? 0,
+                ...item.picks.filter((pick) => ["loss", "tie", "no-pick"].includes(pick.result))
+                  .map((pick) => pick.week),
+              ),
+              eliminatedWeek: undefined,
+            }
           : item,
       ),
       payments: [
