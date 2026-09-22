@@ -21,6 +21,17 @@ check('Explicit buyback preserves history and covers old loss', () => { const p 
 check('Loss after buyback eliminates again', () => assert.equal(reconcileEntry(entry([pick(1, 'loss'), pick(2, 'loss')], { buybacks: 1, restoredThroughWeek: 1 })).eliminatedWeek, 2));
 check('Legacy payment covers one prior elimination', () => assert.equal(reconcileEntry(entry([pick(1, 'loss')], { buybacks: 1 }), [{ playerId: 'entry', type: 'buyback', week: 2 }]).status, 'active'));
 check('Legacy buyback cannot cover a later failure', () => assert.equal(reconcileEntry(entry([pick(3, 'loss')], { buybacks: 1 }), [{ playerId: 'entry', type: 'buyback', week: 2 }]).status, 'eliminated'));
+check('Recorded buyback restores a stored elimination', () => {
+  const player = entry([pick(2, 'loss')], { status: 'eliminated', eliminatedWeek: 2, buybacks: 1, restoredThroughWeek: 1 });
+  const payment = [{ playerId: 'entry', type: 'buyback', week: 2, createdAt: '2026-09-21T00:00:00Z' }];
+  assert.equal(reconcileEntry(player, payment).status, 'active');
+});
+check('Buyback cannot excuse a later loss in the same week', () => {
+  const lostPick = { ...pick(2, 'loss'), resolvedAt: '2026-09-22T00:00:00Z' };
+  const player = entry([lostPick], { buybacks: 1, restoredThroughWeek: 1 });
+  const payment = [{ playerId: 'entry', type: 'buyback', week: 2, createdAt: '2026-09-21T00:00:00Z' }];
+  assert.equal(reconcileEntry(player, payment).status, 'eliminated');
+});
 const game = (week, rest = {}) => ({ id: 'g' + week, week, awayTeamId: 'BUF', homeTeamId: 'MIA', awayScore: 7, homeScore: 14, kickoff: '2026-09-10', status: 'final', ...rest });
 const sync = (player, oldGames = [], games = [game(2)]) => context.exports.resolveState({ players: [player], nflGames: oldGames, payments: [] }, games, 2026, 2);
 check('Sync resolves all stored finalized weeks', () => { const r = sync(entry([pick(1, 'pending'), pick(2, 'pending')]), [game(1)], [game(2, { awayScore: 21 })]); assert.equal(r.picksResolved, 2); assert.equal(r.state.players[0].eliminatedWeek, 1); });
