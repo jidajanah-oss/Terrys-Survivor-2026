@@ -1,4 +1,4 @@
-const CACHE = "terrys-survivor-v17-pin-access";
+const CACHE = "terrys-survivor-v18-buyback-reactivation";
 
 const APP_SHELL = [
   "./",
