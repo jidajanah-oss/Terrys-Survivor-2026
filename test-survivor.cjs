@@ -2,10 +2,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const { stripTypeScriptTypes } = require('node:module');
-const compile = source => stripTypeScriptTypes(source.replace('export function reconcileEntry', 'function reconcileEntry'));
+const compile = source => stripTypeScriptTypes(source.replace(/export function /g, 'function '));
 const shared = { exports: {} };
-vm.runInNewContext(compile(fs.readFileSync('supabase/functions/_shared/survivorStatus.ts', 'utf8') + '\nexports.reconcileEntry = reconcileEntry;'), shared);
-const { reconcileEntry } = shared.exports;
+vm.runInNewContext(compile(fs.readFileSync('supabase/functions/_shared/survivorStatus.ts', 'utf8') + '\nexports.reconcileEntry = reconcileEntry; exports.canBuyBack = canBuyBack;'), shared);
+const { reconcileEntry, canBuyBack } = shared.exports;
 let source = fs.readFileSync('supabase/functions/sync-nfl-week/index.ts', 'utf8');
 source = source.replace(/^[\uFEFF \t]*import .*;\r?\n/gm, '').split('Deno.serve(')[0];
 const context = { reconcileEntry, exports: {} };
@@ -39,6 +39,27 @@ check('Sync repairs earlier failure without current pick', () => assert.equal(sy
 check('Missing scores do not become a tie', () => assert.equal(sync(entry([pick(2, 'pending')]), [], [game(2, { awayScore: undefined })]).picksResolved, 0));
 check('Commissioner result is preserved', () => assert.equal(sync(entry([pick(2, 'win')])).state.players[0].picks[0].result, 'win'));
 check('Repeated sync is idempotent', () => { const r = sync(entry([pick(2, 'pending')])); const repeated = context.exports.resolveState(r.state, [game(2)], 2026, 2); assert.equal(repeated.picksResolved, 0); assert.equal(repeated.playersEliminated, 0); });
+
+
+
+
+check('Weeks 1–5 losses can buy back in Week 6', () => {
+  for (let week = 1; week <= 5; week++) {
+    const p = reconcileEntry(entry([pick(week, 'loss')]));
+    assert.equal(canBuyBack(p, 5), true);
+    const restored = reconcileEntry({...p, status: 'active', eliminatedWeek: undefined, buybacks: 1, restoredThroughWeek: week}, [{playerId: p.id, type: 'buyback', week: 6}]);
+    assert.equal(restored.status, 'active');
+    assert.deepEqual(restored.picks, p.picks);
+    assert.equal(restored.picks[0].teamId, 'BUF');
+    assert.equal(canBuyBack({...restored, status: 'eliminated', eliminatedWeek: 5}, 5), false);
+  }
+});
+check('Week 6 or later losses cannot buy back', () => {
+  for(let week = 6; week <= 18; week++) assert.equal(canBuyBack(reconcileEntry(entry([pick(week, 'loss')])), 5), false);
+});
+check('Unknown elimination and active entries cannot buy back', () => {
+  assert.equal(canBuyBack(entry([], {status: 'eliminated'}), 5), false);
+  assert.equal(canBuyBack(entry([], {eliminatedWeek: 5}), 5), false);
+});
+
 console.log(`${checks} regression checks passed.`);
-
-

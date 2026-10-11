@@ -1,4 +1,4 @@
-import { reconcileEntry } from "../supabase/functions/_shared/survivorStatus";
+import { canBuyBack, reconcileEntry } from "../supabase/functions/_shared/survivorStatus";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BoardPage } from "./components/BoardPage";
 import { StatCard } from "./components/StatCard";
@@ -515,8 +515,8 @@ function SurvivorApp({
   const buyBack = (playerId: string) => {
     const player = state.players.find((item) => item.id === playerId);
     if (!player || player.status !== "eliminated") return;
-    if (state.settings.currentWeek > state.settings.buybackThroughWeek) {
-      showNotice(`Buybacks closed after Week ${state.settings.buybackThroughWeek}.`);
+    if (!canBuyBack(player, state.settings.buybackThroughWeek)) {
+      showNotice(`One buyback is available only for entries eliminated in Weeks 1–${state.settings.buybackThroughWeek}.`);
       return;
     }
 
@@ -528,12 +528,7 @@ function SurvivorApp({
               ...item,
               status: "active",
               buybacks: item.buybacks + 1,
-              restoredThroughWeek: Math.max(
-                item.restoredThroughWeek ?? 0,
-                item.eliminatedWeek ?? 0,
-                ...item.picks.filter((pick) => ["loss", "tie", "no-pick"].includes(pick.result))
-                  .map((pick) => pick.week),
-              ),
+              restoredThroughWeek: item.eliminatedWeek,
               eliminatedWeek: undefined,
             }
           : item,
@@ -940,7 +935,7 @@ function SurvivorApp({
 
       <footer>
         <span>Entry: {currency(state.settings.entryFee)}</span>
-        <span>Buybacks: {currency(state.settings.buybackFee)} through Week {state.settings.buybackThroughWeek}</span>
+        <span>One buyback: {currency(state.settings.buybackFee)} for losses in Weeks 1–{state.settings.buybackThroughWeek}</span>
         <span>Used teams never reset</span>
         <span>{state.nflProvider ? `NFL data: ${state.nflProvider}` : "NFL data not synced"}</span>
       </footer>
@@ -1019,7 +1014,7 @@ function HomePage({ state, prizePool, activeCount, eliminatedCount, selectedPlay
         <article className="panel rules-panel">
           <span className="eyebrow">League rules</span>
           <h2>Every selection matters</h2>
-          <p>Each player pays $20. A team can be used only once by that player all season. Buybacks cost $20 through Week 5 and restore life—not the team list.</p>
+          <p>Each player pays $20. A team can be used only once by that player all season. Each entry may buy back once for $20 after elimination in Weeks 1–5, including a Week 5 loss purchased in Week 6. Eliminations in Week 6 or later are ineligible. Used-team history stays locked all season.</p>
         </article>
       </div>
     </section>
@@ -1146,7 +1141,7 @@ function EntryPage({ state, player, onBuyBack }: {
   onBuyBack: () => void;
 }) {
   if (!player) return <section className="panel centered"><h1>No players yet</h1></section>;
-  const buybackAvailable = player.status === "eliminated" && state.settings.currentWeek <= state.settings.buybackThroughWeek;
+  const buybackAvailable = canBuyBack(player, state.settings.buybackThroughWeek);
   const payments = state.payments.filter((payment) => payment.playerId === player.id);
   const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
   const uniqueUsed = new Set(player.picks.map((pick) => pick.teamId));
@@ -1175,8 +1170,8 @@ function EntryPage({ state, player, onBuyBack }: {
       ) : null}
       {player.status === "eliminated" && !buybackAvailable ? (
         <article className="closed-card">
-          <strong>Buyback window closed</strong>
-          <span>Buybacks ended after Week {state.settings.buybackThroughWeek}.</span>
+          <strong>Buyback unavailable</strong>
+          <span>Only entries eliminated in Weeks 1–{state.settings.buybackThroughWeek} with no previous buyback are eligible.</span>
         </article>
       ) : null}
       <article className="panel">
@@ -1292,7 +1287,7 @@ function CommissionerPage({
   const initialPaidCount = state.players.filter((player) =>
     state.payments.some((payment) => payment.playerId === player.id && payment.type === "initial-entry"),
   ).length;
-  const buybacksClosed = state.settings.currentWeek > state.settings.buybackThroughWeek;
+
   const weekClosed = state.closedWeeks.includes(state.settings.currentWeek);
   const pendingCount = state.players.filter((player) => {
     if (player.status !== "active") return false;
@@ -1383,11 +1378,7 @@ function CommissionerPage({
             <strong>{state.settings.currentWeek}</strong>
             <button onClick={() => onSetWeek(Math.min(18, state.settings.currentWeek + 1))}>+</button>
           </div>
-          <p className={buybacksClosed ? "warning-text" : ""}>
-            {buybacksClosed
-              ? `Buybacks are closed. The final buyback week was Week ${state.settings.buybackThroughWeek}.`
-              : `Buybacks remain available through Week ${state.settings.buybackThroughWeek}.`}
-          </p>
+          <p>One {currency(state.settings.buybackFee)} buyback per entry for eliminations in Weeks 1–{state.settings.buybackThroughWeek}. A Week {state.settings.buybackThroughWeek} loss can buy back in Week {state.settings.buybackThroughWeek + 1}. Used teams stay locked.</p>
         </article>
       </div>
 
@@ -1428,7 +1419,7 @@ function CommissionerPage({
               const playerPayments = state.payments.filter((payment) => payment.playerId === player.id);
               const entryPaid = playerPayments.some((payment) => payment.type === "initial-entry");
               const totalPaid = playerPayments.reduce((sum, payment) => sum + payment.amount, 0);
-              const canBuyBack = player.status === "eliminated" && !buybacksClosed;
+              const buybackEligible = canBuyBack(player, state.settings.buybackThroughWeek);
               const usedTeams = [...new Set(player.picks.map((pick) => pick.teamId))];
               return (
                 <div className="roster-card" key={player.id}>
@@ -1445,7 +1436,7 @@ function CommissionerPage({
                   <div className="used-team-line"><small>Locked teams:</small><span>{usedTeams.join(", ") || "None"}</span></div>
                   <div className="row-actions roster-actions">
                     {!entryPaid ? <button onClick={() => onRecordEntry(player.id)}>Record {currency(state.settings.entryFee)} Entry</button> : null}
-                    {canBuyBack ? <button className="buyback-button" onClick={() => onBuyBack(player.id)}>Buy Back {currency(state.settings.buybackFee)}</button> : null}
+                    {buybackEligible ? <button className="buyback-button" onClick={() => onBuyBack(player.id)}>Buy Back {currency(state.settings.buybackFee)}</button> : null}
                     <button className="remove-button" onClick={() => requestRemove(player)}>Remove</button>
                   </div>
                 </div>

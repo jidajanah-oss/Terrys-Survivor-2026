@@ -46,3 +46,10 @@ export function reconcileEntry<T extends Entry>(player: T, payments: Payment[] =
     ? { ...player, status: "eliminated", eliminatedWeek }
     : { ...player, status: "active", eliminatedWeek: undefined };
 }
+
+// Eligibility follows the elimination week, regardless of the purchase week.
+export function canBuyBack(player: Entry, throughWeek: number): boolean {
+  return player.status === "eliminated" && player.buybacks === 0
+    && Number.isInteger(player.eliminatedWeek)
+    && player.eliminatedWeek! >= 1 && player.eliminatedWeek! <= throughWeek;
+}
