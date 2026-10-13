@@ -516,7 +516,7 @@ function SurvivorApp({
     const player = state.players.find((item) => item.id === playerId);
     if (!player || player.status !== "eliminated") return;
     if (!canBuyBack(player, state.settings.buybackThroughWeek)) {
-      showNotice(`One buyback is available only for entries eliminated in Weeks 1–${state.settings.buybackThroughWeek}.`);
+      showNotice(`A buyback is available only for entries eliminated in Weeks 1–${state.settings.buybackThroughWeek}.`);
       return;
     }
 
@@ -935,7 +935,7 @@ function SurvivorApp({
 
       <footer>
         <span>Entry: {currency(state.settings.entryFee)}</span>
-        <span>One buyback: {currency(state.settings.buybackFee)} for losses in Weeks 1–{state.settings.buybackThroughWeek}</span>
+        <span>Buybacks: {currency(state.settings.buybackFee)} for losses in Weeks 1–{state.settings.buybackThroughWeek}</span>
         <span>Used teams never reset</span>
         <span>{state.nflProvider ? `NFL data: ${state.nflProvider}` : "NFL data not synced"}</span>
       </footer>
@@ -1171,7 +1171,7 @@ function EntryPage({ state, player, onBuyBack }: {
       {player.status === "eliminated" && !buybackAvailable ? (
         <article className="closed-card">
           <strong>Buyback unavailable</strong>
-          <span>Only entries eliminated in Weeks 1–{state.settings.buybackThroughWeek} with no previous buyback are eligible.</span>
+          <span>Only entries eliminated in Weeks 1–{state.settings.buybackThroughWeek} are eligible.</span>
         </article>
       ) : null}
       <article className="panel">
@@ -1378,7 +1378,7 @@ function CommissionerPage({
             <strong>{state.settings.currentWeek}</strong>
             <button onClick={() => onSetWeek(Math.min(18, state.settings.currentWeek + 1))}>+</button>
           </div>
-          <p>One {currency(state.settings.buybackFee)} buyback per entry for eliminations in Weeks 1–{state.settings.buybackThroughWeek}. A Week {state.settings.buybackThroughWeek} loss can buy back in Week {state.settings.buybackThroughWeek + 1}. Used teams stay locked.</p>
+          <p>{currency(state.settings.buybackFee)} buybacks for eliminations in Weeks 1–{state.settings.buybackThroughWeek}. A Week {state.settings.buybackThroughWeek} loss can buy back in Week {state.settings.buybackThroughWeek + 1}. Used teams stay locked.</p>
         </article>
       </div>
 

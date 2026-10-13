@@ -51,7 +51,7 @@ check('Weeks 1–5 losses can buy back in Week 6', () => {
     assert.equal(restored.status, 'active');
     assert.deepEqual(restored.picks, p.picks);
     assert.equal(restored.picks[0].teamId, 'BUF');
-    assert.equal(canBuyBack({...restored, status: 'eliminated', eliminatedWeek: 5}, 5), false);
+    assert.equal(canBuyBack({...restored, status: 'eliminated', eliminatedWeek: 5}, 5), true);
   }
 });
 check('Week 6 or later losses cannot buy back', () => {
@@ -62,4 +62,15 @@ check('Unknown elimination and active entries cannot buy back', () => {
   assert.equal(canBuyBack(entry([], {eliminatedWeek: 5}), 5), false);
 });
 
+
+check('Jimbo can buy back after two purchases without clearing five teams', () => {
+  const picks = [pick(1, 'loss'), pick(2, 'loss'), pick(3, 'win'), pick(4, 'win'), pick(5, 'loss')];
+  const p = reconcileEntry(entry(picks, {status: 'eliminated', buybacks: 2, restoredThroughWeek: 2}));
+  assert.equal(p.eliminatedWeek, 5);
+  assert.equal(canBuyBack(p, 5), true);
+  const restored = reconcileEntry({...p, status: 'active', eliminatedWeek: undefined, buybacks: 3, restoredThroughWeek: 5});
+  assert.equal(restored.status, 'active');
+  assert.deepEqual(restored.picks, picks);
+  assert.equal(canBuyBack({...restored, status: 'eliminated', eliminatedWeek: 6}, 5), false);
+});
 console.log(`${checks} regression checks passed.`);
