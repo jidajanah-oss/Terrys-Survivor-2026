@@ -1,4 +1,4 @@
-const CACHE = "terrys-survivor-v19-elimination-week-buyback";
+const CACHE = "terrys-survivor-v20-repeat-buybacks";
 
 const APP_SHELL = [
   "./",
