@@ -1,3 +1,4 @@
+import { CommissionerGroup } from "./features/commissioner/CommissionerGroup";
 import { canBuyBack, reconcileEntry } from "../supabase/functions/_shared/survivorStatus";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BoardPage } from "./components/BoardPage";
@@ -892,23 +893,7 @@ function SurvivorApp({
         ) : null}
         {page === "board" ? <BoardPage state={state} showPayments={hasCommissionerAccess} /> : null}
         {page === "commissioner" && hasCommissionerAccess ? (
-          <>
-            {accountCommissionerIdentity ? (
-              <CloudLeadershipPanel
-                identity={
-                  accountCommissionerIdentity
-                }
-                onRefresh={
-                  refreshCloudIdentity
-                }
-              />
-            ) : null}
-            <RosterReadinessPanel
-              players={state.players}
-              leagueId={cloudIdentity?.leagueId}
-              onUpdatePlayer={updatePlayer}
-            />
-            {cloudIdentity?.leagueId ? <PinAccessPanel leagueId={cloudIdentity.leagueId} /> : null}
+          <div className="commissioner-hq">
             <CommissionerPage
             state={state}
             prizePool={prizePool}
@@ -929,7 +914,23 @@ function SurvivorApp({
             onSyncAutomaticResults={syncAutomaticResults}
             nflSyncing={nflSyncing}
           />
-          </>
+            {accountCommissionerIdentity ? (
+              <CommissionerGroup title="Cloud commissioner accounts"><CloudLeadershipPanel
+                identity={
+                  accountCommissionerIdentity
+                }
+                onRefresh={
+                  refreshCloudIdentity
+                }
+              /></CommissionerGroup>
+            ) : null}
+            <CommissionerGroup title="Player accounts and invitations"><RosterReadinessPanel
+              players={state.players}
+              leagueId={cloudIdentity?.leagueId}
+              onUpdatePlayer={updatePlayer}
+            /></CommissionerGroup>
+            {cloudIdentity?.leagueId ? <CommissionerGroup title="PIN access"><PinAccessPanel leagueId={cloudIdentity.leagueId} /></CommissionerGroup> : null}
+          </div>
         ) : null}
       </main>
 
@@ -1314,42 +1315,9 @@ function CommissionerPage({
   return (
     <section className="page-stack">
       <div className="page-heading">
-        <div><span className="eyebrow">Commissioner HQ</span><h1>Roster and buybacks</h1><p>Manage one Primary Commissioner, one Co-Commissioner, players, payments, eliminations, and buybacks.</p></div>
+        <div><span className="eyebrow">Commissioner HQ</span><h1>Commissioner HQ</h1><p>Open a group below to manage the league.</p></div>
         <strong className="pool-badge">Pool {currency(prizePool)}</strong>
       </div>
-
-      <details className="panel leadership-panel leadership-collapsible">
-          <summary className="leadership-collapsible__summary">
-            <div>
-              <span className="eyebrow">League leadership</span>
-              <h2>Commissioner assignments</h2>
-            </div>
-            <span className="leadership-collapsible__state">
-              <span className="leadership-collapsible__open">Open controls</span>
-              <span className="leadership-collapsible__close">Close controls</span>
-            </span>
-          </summary>
-
-          <div className="leadership-collapsible__content">
-            <p>
-              Exactly one Primary Commissioner and one Co-Commissioner receive
-              Commissioner HQ access.
-            </p>
-
-            <div className="leadership-grid">
-          {state.players.map((player) => (
-            <div className="leadership-row" key={player.id}>
-              <div><strong>{player.name}</strong><small>{player.email || "No email"}</small></div>
-              <select value={player.role} onChange={(event) => onAssignRole(player.id, event.target.value as PlayerRole)}>
-                <option value="player">Player</option>
-                <option value="primary-commissioner">Primary Commissioner</option>
-                <option value="co-commissioner">Co-Commissioner</option>
-              </select>
-            </div>
-          ))}
-        </div>
-                </div>
-        </details>
 
       <div className="stats-grid">
         <StatCard label="Roster" value={state.players.length} note={`${activeCount} active`} />
@@ -1358,59 +1326,7 @@ function CommissionerPage({
         <StatCard label="Prize Pool" value={currency(prizePool)} note="Recorded payments" />
       </div>
 
-      <div className="two-column">
-        <article className="panel">
-          <div className="panel-heading"><div><span className="eyebrow">New player</span><h2>Add to roster</h2></div></div>
-          <form className="form-stack" onSubmit={submit}>
-            <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Player name" /></label>
-            <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Optional email" /></label>
-            <label className="checkbox-label">
-              <input type="checkbox" checked={recordPayment} onChange={(event) => setRecordPayment(event.target.checked)} />
-              Record the {currency(state.settings.entryFee)} entry as paid now
-            </label>
-            <button className="primary-button" type="submit">Add Player</button>
-          </form>
-        </article>
-        <article className="panel">
-          <div className="panel-heading"><div><span className="eyebrow">League week</span><h2>Current Week</h2></div></div>
-          <div className="week-control">
-            <button onClick={() => onSetWeek(Math.max(1, state.settings.currentWeek - 1))}>−</button>
-            <strong>{state.settings.currentWeek}</strong>
-            <button onClick={() => onSetWeek(Math.min(18, state.settings.currentWeek + 1))}>+</button>
-          </div>
-          <p>{currency(state.settings.buybackFee)} buybacks for eliminations in Weeks 1–{state.settings.buybackThroughWeek}. A Week {state.settings.buybackThroughWeek} loss can buy back in Week {state.settings.buybackThroughWeek + 1}. Used teams stay locked.</p>
-        </article>
-      </div>
-
-      <article className="panel cloud-readiness-panel">
-        <div className="panel-heading">
-          <div><span className="eyebrow">Live NFL automation</span><h2>Schedule and final scoring</h2></div>
-          <span className={`payment-status ${cloudConfigured ? "payment-status--paid" : "payment-status--due"}`}>{cloudConfigured ? "Supabase configured" : "Local development"}</span>
-        </div>
-        <p>Supabase now fetches the live NFL schedule and final scores through a server-side Edge Function. Final games automatically mark picks as wins, losses, or ties and eliminate losing entries.</p>
-        <div className="row-actions">
-          <button className="primary-button" onClick={onSyncAutomaticResults} disabled={nflSyncing}>{nflSyncing ? "Checking NFL…" : "Check Live NFL Schedule & Results"}</button>
-          <span className="sync-stamp">{state.lastScheduleSyncAt ? `Last NFL sync: ${new Date(state.lastScheduleSyncAt).toLocaleString()}` : "No live NFL sync yet"}</span>
-        </div>
-        <small>{cloudConfigured ? `Provider: ${state.nflProvider ?? "waiting for first sync"}. A scheduled Supabase job can run this automatically even when no player has the app open.` : "Local mode continues to use a demonstration schedule and deterministic test results."}</small>
-      </article>
-
-      <article className="panel weekly-closeout-panel">
-        <div className="panel-heading">
-          <div><span className="eyebrow">Weekly operations</span><h2>Close and advance Week {state.settings.currentWeek}</h2></div>
-          <span className={`payment-status ${weekClosed ? "payment-status--paid" : "payment-status--due"}`}>{weekClosed ? "Closed" : "Open"}</span>
-        </div>
-        <p>{weekClosed
-          ? `Week ${state.settings.currentWeek} is locked. You may advance to the next week.`
-          : pendingCount > 0
-            ? `${pendingCount} submitted pick${pendingCount === 1 ? " is" : "s are"} still pending a final result.`
-            : "All submitted picks are resolved. Closing the week will eliminate active players who did not submit a pick."}</p>
-        <div className="row-actions">
-          <button className="primary-button" onClick={onCloseWeek} disabled={weekClosed || pendingCount > 0}>Close Week {state.settings.currentWeek}</button>
-          <button className="buyback-button" onClick={onAdvanceWeek} disabled={!weekClosed || state.settings.currentWeek >= 18}>Advance to Week {Math.min(18, state.settings.currentWeek + 1)}</button>
-        </div>
-      </article>
-
+      <CommissionerGroup title="Players and buybacks">
       <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">Roster manager</span><h2>Players and payments</h2></div></div>
         {state.players.length === 0 ? <p className="empty-state">No players have been added.</p> : (
@@ -1446,9 +1362,65 @@ function CommissionerPage({
         )}
       </article>
 
-      <article className="panel">
-      <details className="panel override-panel">
-        <summary className="override-summary">
+      </CommissionerGroup>
+      <CommissionerGroup title="Add player">
+        <article className="panel">
+          <div className="panel-heading"><div><span className="eyebrow">New player</span><h2>Add to roster</h2></div></div>
+          <form className="form-stack" onSubmit={submit}>
+            <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Player name" /></label>
+            <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Optional email" /></label>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={recordPayment} onChange={(event) => setRecordPayment(event.target.checked)} />
+              Record the {currency(state.settings.entryFee)} entry as paid now
+            </label>
+            <button className="primary-button" type="submit">Add Player</button>
+          </form>
+        </article>
+      </CommissionerGroup>
+      <CommissionerGroup title="Weekly operations">
+        <article className="panel">
+          <div className="panel-heading"><div><span className="eyebrow">League week</span><h2>Current Week</h2></div></div>
+          <div className="week-control">
+            <button onClick={() => onSetWeek(Math.max(1, state.settings.currentWeek - 1))}>−</button>
+            <strong>{state.settings.currentWeek}</strong>
+            <button onClick={() => onSetWeek(Math.min(18, state.settings.currentWeek + 1))}>+</button>
+          </div>
+          <p>{currency(state.settings.buybackFee)} buybacks for eliminations in Weeks 1–{state.settings.buybackThroughWeek}. A Week {state.settings.buybackThroughWeek} loss can buy back in Week {state.settings.buybackThroughWeek + 1}. Used teams stay locked.</p>
+        </article>
+
+      <article className="panel cloud-readiness-panel">
+        <div className="panel-heading">
+          <div><span className="eyebrow">Live NFL automation</span><h2>Schedule and final scoring</h2></div>
+          <span className={`payment-status ${cloudConfigured ? "payment-status--paid" : "payment-status--due"}`}>{cloudConfigured ? "Supabase configured" : "Local development"}</span>
+        </div>
+        <p>Supabase now fetches the live NFL schedule and final scores through a server-side Edge Function. Final games automatically mark picks as wins, losses, or ties and eliminate losing entries.</p>
+        <div className="row-actions">
+          <button className="primary-button" onClick={onSyncAutomaticResults} disabled={nflSyncing}>{nflSyncing ? "Checking NFL…" : "Check Live NFL Schedule & Results"}</button>
+          <span className="sync-stamp">{state.lastScheduleSyncAt ? `Last NFL sync: ${new Date(state.lastScheduleSyncAt).toLocaleString()}` : "No live NFL sync yet"}</span>
+        </div>
+        <small>{cloudConfigured ? `Provider: ${state.nflProvider ?? "waiting for first sync"}. A scheduled Supabase job can run this automatically even when no player has the app open.` : "Local mode continues to use a demonstration schedule and deterministic test results."}</small>
+      </article>
+
+      <article className="panel weekly-closeout-panel">
+        <div className="panel-heading">
+          <div><span className="eyebrow">Weekly operations</span><h2>Close and advance Week {state.settings.currentWeek}</h2></div>
+          <span className={`payment-status ${weekClosed ? "payment-status--paid" : "payment-status--due"}`}>{weekClosed ? "Closed" : "Open"}</span>
+        </div>
+        <p>{weekClosed
+          ? `Week ${state.settings.currentWeek} is locked. You may advance to the next week.`
+          : pendingCount > 0
+            ? `${pendingCount} submitted pick${pendingCount === 1 ? " is" : "s are"} still pending a final result.`
+            : "All submitted picks are resolved. Closing the week will eliminate active players who did not submit a pick."}</p>
+        <div className="row-actions">
+          <button className="primary-button" onClick={onCloseWeek} disabled={weekClosed || pendingCount > 0}>Close Week {state.settings.currentWeek}</button>
+          <button className="buyback-button" onClick={onAdvanceWeek} disabled={!weekClosed || state.settings.currentWeek >= 18}>Advance to Week {Math.min(18, state.settings.currentWeek + 1)}</button>
+        </div>
+      </article>
+
+      </CommissionerGroup>
+      <CommissionerGroup title="Result corrections">
+      <article className="panel override-panel">
+        <div className="override-summary">
           <div>
             <span className="eyebrow">Commissioner safety</span>
             <h2>Result Corrections &amp; Overrides</h2>
@@ -1458,8 +1430,7 @@ function CommissionerPage({
               or an approved correction.
             </p>
           </div>
-          <span className="override-summary__action">Open controls</span>
-        </summary>
+        </div>
 
         <div className="override-body">
           <p className="override-warning">
@@ -1553,7 +1524,10 @@ function CommissionerPage({
             })}
           </div>
         </div>
-      </details>
+      </article>
+      </CommissionerGroup>
+      <CommissionerGroup title="Payment ledger">
+      <article className="panel">
         <div className="panel-heading"><div><span className="eyebrow">Money trail</span><h2>Payment ledger</h2></div><strong>{currency(prizePool)}</strong></div>
         {state.payments.length === 0 ? <p className="empty-state">No payments recorded.</p> : (
           <div className="payment-list">
@@ -1569,6 +1543,40 @@ function CommissionerPage({
           </div>
         )}
       </article>
+      </CommissionerGroup>
+      <details className="panel leadership-panel leadership-collapsible">
+          <summary className="leadership-collapsible__summary">
+            <div>
+              <span className="eyebrow">League leadership</span>
+              <h2>Commissioner assignments</h2>
+            </div>
+            <span className="leadership-collapsible__state">
+              <span className="leadership-collapsible__open">Open controls</span>
+              <span className="leadership-collapsible__close">Close controls</span>
+            </span>
+          </summary>
+
+          <div className="leadership-collapsible__content">
+            <p>
+              Exactly one Primary Commissioner and one Co-Commissioner receive
+              Commissioner HQ access.
+            </p>
+
+            <div className="leadership-grid">
+          {state.players.map((player) => (
+            <div className="leadership-row" key={player.id}>
+              <div><strong>{player.name}</strong><small>{player.email || "No email"}</small></div>
+              <select value={player.role} onChange={(event) => onAssignRole(player.id, event.target.value as PlayerRole)}>
+                <option value="player">Player</option>
+                <option value="primary-commissioner">Primary Commissioner</option>
+                <option value="co-commissioner">Co-Commissioner</option>
+              </select>
+            </div>
+          ))}
+        </div>
+                </div>
+        </details>
+
 
     </section>
   );

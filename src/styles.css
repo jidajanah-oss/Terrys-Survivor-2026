@@ -1373,3 +1373,25 @@ footer {
     font-size: .72rem;
   }
 }
+.commissioner-hq { display: grid; gap: 10px; }
+.commissioner-hq .page-stack { gap: 10px; }
+.commissioner-group { border: 1px solid #574a2c; border-radius: 12px; background: #131b23; overflow: hidden; }
+.commissioner-group > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 12px 16px; cursor: pointer; font-weight: 700; }
+.commissioner-group > summary::-webkit-details-marker { display: none; }
+.commissioner-group > summary:focus-visible { outline: 2px solid #e7b94e; outline-offset: -3px; }
+.commissioner-group[open] > summary { color: #f6d584; border-bottom: 1px solid #574a2c; }
+.commissioner-group__indicator { font-size: 22px; line-height: 1; }
+.commissioner-group[open] > summary .commissioner-group__indicator { transform: rotate(45deg); }
+.commissioner-group__content { padding: 12px; display: grid; gap: 12px; }
+.commissioner-group__content > .panel { margin: 0; padding: 14px; box-shadow: none; }
+.commissioner-hq .stats-grid { gap: 8px; }
+.commissioner-hq .stat-card { padding: 12px; }
+.commissioner-hq .roster-manager { gap: 10px; }
+.commissioner-hq .roster-card { padding: 14px; }
+.commissioner-hq .leadership-collapsible { margin: 0; padding: 14px; }
+@media (max-width: 600px) {
+  .commissioner-hq .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .commissioner-group__content { padding: 8px; }
+  .commissioner-group > summary { padding-inline: 12px; }
+  .commissioner-hq .roster-card__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
